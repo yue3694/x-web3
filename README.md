@@ -70,6 +70,13 @@ After the first deploy, paste the printed address into
 - Vite 5 + React 18, wagmi v2 + viem v2, `@tanstack/react-query` v5
 - Foundry (forge / cast / anvil), Solidity 0.8.24, OpenZeppelin contracts
 
+## Architecture & feature docs
+
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — full system walkthrough:
+  the contract ↔ frontend ABI bridge, Sepolia deploy pipeline, Notepad
+  storage invariants (swap-and-pop, monotonic ids), local dev workflow,
+  and a cookbook for adding new contracts.
+
 ## Security
 
 - **Never** commit a real private key or seed phrase. `.env` is git-ignored.

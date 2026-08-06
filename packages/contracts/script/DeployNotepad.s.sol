@@ -1,20 +1,37 @@
 // SPDX-License-Identifier: MIT
+// ============================================================================
+//  DeployNotepad.s.sol  ——  把 Notepad 部署到任意 EVM 链
+// ----------------------------------------------------------------------------
+//  与 DeployCounter.s.sol 的唯一差别：Notepad 没有构造函数参数。
+//
+//  跑法（Sepolia）：
+//
+//      forge script script/DeployNotepad.s.sol:DeployNotepad \
+//          --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv
+//
+//  或用项目脚本：
+//
+//      pnpm contracts:deploy:notepad:sepolia
+//
+//  部署完成后，console 会打印合约地址。把地址粘进：
+//      apps/web/src/contracts/deployments.ts
+//          notepadDeployments.sepolia.address = '0x...'
+// ============================================================================
+
 pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {Notepad} from "../src/Notepad.sol";
 
-/// @notice Deploys Notepad to the configured network (defaults to --rpc-url arg).
-///         No constructor args — Notepad is ownerless and self-contained.
-///         After broadcast, the address is logged and (when --verify is set)
-///         automatically submitted to Etherscan.
 contract DeployNotepad is Script {
     function run() external {
-        // `vm.envUint` reads from `.env` automatically when Foundry is run
-        // from the package root, OR from the `--private-key` flag.
+        // vm.envUint 从 .env 自动读取（前提：当前工作目录有 .env）。
+        // 也可以 `--private-key 0x...` 覆盖。
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
 
+        // startBroadcast / stopBroadcast 之间的所有合约调用都会被广播成
+        // 由 deployer 签名的真实交易。省略 --broadcast 时进入 dry-run 模式。
         vm.startBroadcast(deployerPrivateKey);
         Notepad notepad = new Notepad();
         vm.stopBroadcast();

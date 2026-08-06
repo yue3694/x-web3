@@ -3,6 +3,10 @@
 Foundry workspace for the smart contracts. Targets **Sepolia** by default
 (`https://sepolia.etherscan.io/`).
 
+> **New here?** Read [`TOUR.md`](./TOUR.md) — a guided walkthrough that
+> tells you the right reading order for every file in this directory and
+> what to focus on in each.
+
 ## Prerequisites
 
 ```bash
