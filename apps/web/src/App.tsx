@@ -1,16 +1,16 @@
 import {ConnectButton} from "./components/ConnectButton";
-import {CounterCard} from "./components/CounterCard";
+import {Notepad} from "./components/Notepad";
 
 export function App() {
     return (
         <main className="container">
             <header className="header">
-                <h1>x-web3</h1>
+                <h1>x-web3 · On-chain Notepad</h1>
                 <p>Vite + React + wagmi · Sepolia testnet</p>
                 <ConnectButton />
             </header>
             <section className="panel">
-                <CounterCard />
+                <Notepad />
             </section>
             <footer className="footer">
                 <a

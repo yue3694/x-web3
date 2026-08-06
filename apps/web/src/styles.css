@@ -106,3 +106,191 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 a { color: var(--accent); }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* ============================================================ */
+/* Notepad (two-column: list + editor)                            */
+/* ============================================================ */
+
+.notepad {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) 1fr;
+    gap: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    min-height: 420px;
+}
+
+@media (max-width: 720px) {
+    .notepad {
+        grid-template-columns: 1fr;
+    }
+}
+
+.notes-list {
+    border-right: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 96%, var(--border) 4%);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+@media (max-width: 720px) {
+    .notes-list { border-right: none; border-bottom: 1px solid var(--border); }
+}
+
+.notes-list__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--border);
+    gap: 0.5rem;
+}
+
+.notes-list__header h2 {
+    margin: 0;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.notes-list__items {
+    list-style: none;
+    margin: 0;
+    padding: 0.25rem 0;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.notes-list__item { padding: 0; }
+
+.notes-list__item--active {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.notes-list__btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+    width: 100%;
+    padding: 0.625rem 1rem;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    color: var(--fg);
+}
+
+.notes-list__btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    color: var(--fg);
+    border: none;
+}
+
+.notes-list__title {
+    font-weight: 500;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.notes-list__meta {
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+/* ---------- Editor ---------- */
+.editor {
+    padding: 1.25rem 1.25rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.editor__empty,
+.editor__view,
+.editor__form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+    flex: 1;
+}
+
+.editor__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.editor__header h2 { margin: 0; font-size: 1.25rem; }
+
+.editor__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.editor__label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    font-size: 0.875rem;
+    color: var(--muted);
+    position: relative;
+}
+
+.editor__label input,
+.editor__label textarea {
+    font: inherit;
+    padding: 0.625rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--fg);
+    resize: vertical;
+}
+
+.editor__label input:focus,
+.editor__label textarea:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: var(--accent);
+}
+
+.editor__counter {
+    align-self: flex-end;
+    font-size: 0.75rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.editor__counter--over { color: var(--error); }
+
+.editor__body {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: inherit;
+    font-size: 0.95rem;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    background: color-mix(in srgb, var(--border) 50%, transparent);
+    border-radius: 8px;
+    overflow: auto;
+    max-height: 50vh;
+}
+
+.editor__tx { margin-top: 0.25rem; }
+
+button.danger {
+    border-color: var(--error);
+    color: var(--error);
+}
+
+button.danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+    color: var(--error);
+    border-color: var(--error);
+}

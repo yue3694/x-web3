@@ -12,8 +12,10 @@
     "format:check": "forge fmt --check",
     "deploy:sepolia": "forge script script/DeployCounter.s.sol:DeployCounter --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
     "deploy:sepolia:no-verify": "forge script script/DeployCounter.s.sol:DeployCounter --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
+    "deploy:notepad:sepolia": "forge script script/DeployNotepad.s.sol:DeployNotepad --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
+    "deploy:notepad:sepolia:no-verify": "forge script script/DeployNotepad.s.sol:DeployNotepad --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
     "verify:sepolia": "forge verify-contract --chain sepolia --etherscan-api-key $ETHERSCAN_API_KEY --watch",
-    "export:abi": "node ./script/export-abi.mjs",
+    "export:abi": "node ./script/export-abi.mjs Counter Notepad",
     "clean": "forge clean"
   },
   "devDependencies": {

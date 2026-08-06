@@ -15,7 +15,9 @@
     "contracts:compile": "pnpm --filter @x-web3/contracts compile",
     "contracts:test": "pnpm --filter @x-web3/contracts test",
     "contracts:deploy:sepolia": "pnpm --filter @x-web3/contracts deploy:sepolia",
-    "contracts:verify:sepolia": "pnpm --filter @x-web3/contracts verify:sepolia"
+    "contracts:deploy:notepad:sepolia": "pnpm --filter @x-web3/contracts deploy:notepad:sepolia",
+    "contracts:verify:sepolia": "pnpm --filter @x-web3/contracts verify:sepolia",
+    "contracts:export:abi": "pnpm --filter @x-web3/contracts export:abi"
   },
   "devDependencies": {
     "typescript": "^5.6.3"
