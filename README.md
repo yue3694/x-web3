@@ -76,6 +76,8 @@ After the first deploy, paste the printed address into
   the contract ↔ frontend ABI bridge, Sepolia deploy pipeline, Notepad
   storage invariants (swap-and-pop, monotonic ids), local dev workflow,
   and a cookbook for adding new contracts.
+- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — repeatable AWS S3 + CloudFront
+  deployment, custom-domain certificate setup, and Cloudflare DNS automation.
 
 ## Security
 

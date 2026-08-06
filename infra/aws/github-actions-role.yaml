@@ -1,0 +1,60 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Least-privilege GitHub Actions OIDC role for x-web3 frontend releases.
+
+Parameters:
+  GitHubRepository:
+    Type: String
+    Default: yue3694/x-web3
+    AllowedPattern: "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+  GitHubBranch:
+    Type: String
+    Default: main
+    AllowedPattern: "^[A-Za-z0-9_./-]+$"
+  SiteBucketName:
+    Type: String
+  DistributionId:
+    Type: String
+
+Resources:
+  DeploymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Deploys the x-web3 static build after changes merge to main.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubRepository}:ref:refs/heads/${GitHubBranch}"
+      Policies:
+        - PolicyName: PublishStaticSite
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListSiteBucket
+                Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${SiteBucketName}"
+              - Sid: UpdateSiteObjects
+                Effect: Allow
+                Action:
+                  - s3:DeleteObject
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${SiteBucketName}/*"
+              - Sid: InvalidateDistribution
+                Effect: Allow
+                Action: cloudfront:CreateInvalidation
+                Resource: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${DistributionId}"
+
+Outputs:
+  DeploymentRoleArn:
+    Description: Store as the GitHub Actions repository variable AWS_ROLE_ARN.
+    Value: !GetAtt DeploymentRole.Arn

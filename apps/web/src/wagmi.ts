@@ -11,6 +11,7 @@ const SEPOLIA_RPC_URL =
 // warning if left blank.
 const WALLETCONNECT_PROJECT_ID =
     import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? "";
+const APP_URL = import.meta.env.VITE_APP_URL ?? window.location.origin;
 
 // ConnectKit's `getDefaultConfig` returns the args expected by `createConfig`,
 // with sensible defaults for connectors/transports injected. We then forward
@@ -19,7 +20,7 @@ export const wagmiConfig = createConfig(
     getDefaultConfig({
         appName: "x-web3",
         appDescription: "On-chain Notepad",
-        appUrl: "https://x-web3.local",
+        appUrl: APP_URL,
         walletConnectProjectId: WALLETCONNECT_PROJECT_ID,
         chains: [sepolia],
         transports: {

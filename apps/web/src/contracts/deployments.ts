@@ -5,16 +5,20 @@
 // entry below.
 import type {Address} from "viem";
 
+function optionalAddress(value: string | undefined): Address | undefined {
+    return value?.match(/^0x[0-9a-fA-F]{40}$/) ? (value as Address) : undefined;
+}
+
 export const counterDeployments = {
     sepolia: {
-        address: undefined as Address | undefined,
+        address: optionalAddress(import.meta.env.VITE_COUNTER_CONTRACT_ADDRESS),
         chainId: 11155111,
     },
 } as const;
 
 export const notepadDeployments = {
     sepolia: {
-        address: undefined as Address | undefined,
+        address: optionalAddress(import.meta.env.VITE_NOTEPAD_CONTRACT_ADDRESS),
         chainId: 11155111,
     },
 } as const;

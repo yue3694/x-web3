@@ -26,6 +26,7 @@ packages/contracts/out/
 .env.local
 .env.*.local
 !.env.example
+deploy/config.env
 
 # ---------- IDE ----------
 .idea/

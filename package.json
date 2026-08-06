@@ -11,6 +11,7 @@
     "dev": "pnpm --filter @x-web3/web dev",
     "build": "pnpm --filter @x-web3/web build",
     "preview": "pnpm --filter @x-web3/web preview",
+    "deploy:aws": "bash scripts/deploy-aws.sh",
     "lint": "pnpm -r --parallel run lint",
     "contracts:compile": "pnpm --filter @x-web3/contracts compile",
     "contracts:test": "pnpm --filter @x-web3/contracts test",

@@ -1,0 +1,75 @@
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      S3_BUCKET: ${{ vars.S3_BUCKET }}
+      CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+      VITE_APP_URL: https://notes.inxyu.cn
+      VITE_SEPOLIA_RPC_URL: ${{ vars.VITE_SEPOLIA_RPC_URL }}
+      VITE_WALLETCONNECT_PROJECT_ID: ${{ vars.VITE_WALLETCONNECT_PROJECT_ID }}
+      VITE_COUNTER_CONTRACT_ADDRESS: ${{ vars.VITE_COUNTER_CONTRACT_ADDRESS }}
+      VITE_NOTEPAD_CONTRACT_ADDRESS: ${{ vars.VITE_NOTEPAD_CONTRACT_ADDRESS }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload immutable assets
+        run: >-
+          aws s3 sync apps/web/dist "s3://${S3_BUCKET}"
+          --delete
+          --exclude index.html
+          --cache-control public,max-age=31536000,immutable
+
+      - name: Upload application shell
+        run: >-
+          aws s3 cp apps/web/dist/index.html "s3://${S3_BUCKET}/index.html"
+          --cache-control no-cache,no-store,must-revalidate
+          --content-type text/html
+
+      - name: Invalidate CloudFront cache
+        run: >-
+          aws cloudfront create-invalidation
+          --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}"
+          --paths "/*"

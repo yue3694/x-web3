@@ -1,0 +1,30 @@
+# Security invariants for the x-web3 CloudFormation templates.
+
+let buckets = Resources.*[ Type == 'AWS::S3::Bucket' ]
+
+rule s3_public_access_blocked when %buckets !empty {
+    %buckets.Properties.PublicAccessBlockConfiguration.BlockPublicAcls == true
+    %buckets.Properties.PublicAccessBlockConfiguration.BlockPublicPolicy == true
+    %buckets.Properties.PublicAccessBlockConfiguration.IgnorePublicAcls == true
+    %buckets.Properties.PublicAccessBlockConfiguration.RestrictPublicBuckets == true
+}
+
+rule s3_default_encryption when %buckets !empty {
+    %buckets.Properties.BucketEncryption.ServerSideEncryptionConfiguration[*].ServerSideEncryptionByDefault.SSEAlgorithm in ["AES256", "aws:kms"]
+}
+
+rule s3_versioning_enabled when %buckets !empty {
+    %buckets.Properties.VersioningConfiguration.Status == "Enabled"
+}
+
+let distributions = Resources.*[ Type == 'AWS::CloudFront::Distribution' ]
+
+rule cloudfront_redirects_http when %distributions !empty {
+    %distributions.Properties.DistributionConfig.DefaultCacheBehavior.ViewerProtocolPolicy == "redirect-to-https"
+}
+
+let roles = Resources.*[ Type == 'AWS::IAM::Role' ]
+
+rule github_role_uses_oidc when %roles !empty {
+    %roles.Properties.AssumeRolePolicyDocument.Statement[*].Action == "sts:AssumeRoleWithWebIdentity"
+}
