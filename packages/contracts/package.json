@@ -1,0 +1,22 @@
+{
+  "name": "@x-web3/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Foundry smart contracts — deploy to Sepolia",
+  "scripts": {
+    "compile": "forge build",
+    "test": "forge test",
+    "test:verbose": "forge test -vvv",
+    "coverage": "forge coverage",
+    "format": "forge fmt",
+    "format:check": "forge fmt --check",
+    "deploy:sepolia": "forge script script/DeployCounter.s.sol:DeployCounter --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
+    "deploy:sepolia:no-verify": "forge script script/DeployCounter.s.sol:DeployCounter --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
+    "verify:sepolia": "forge verify-contract --chain sepolia --etherscan-api-key $ETHERSCAN_API_KEY --watch",
+    "export:abi": "node ./script/export-abi.mjs",
+    "clean": "forge clean"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5"
+  }
+}
