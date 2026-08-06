@@ -1,42 +1,87 @@
-import {useAccount, useConnect, useDisconnect} from "wagmi";
+import {ConnectKitButton} from "connectkit";
 
+/**
+ * Cyberpunk-themed wallet button. ConnectKit owns the modal/connector list,
+ * but the trigger button is fully rendered here so it can match the rest of
+ * the HUD: chamfered border, neon pink glow on hover, monospace address.
+ */
 export function ConnectButton() {
-    const {address, isConnected, chain} = useAccount();
-    const {connectors, connect, isPending, error} = useConnect();
-    const {disconnect} = useDisconnect();
-
-    if (isConnected) {
-        return (
-            <div className="connect">
-                <span className="badge">
-                    {chain?.name ?? "Unknown"} · {chain?.id ?? "—"}
-                </span>
-                <code className="address">{shorten(address)}</code>
-                <button type="button" onClick={() => disconnect()}>
-                    Disconnect
-                </button>
-            </div>
-        );
-    }
-
     return (
-        <div className="connect">
-            {connectors.map((connector) => (
-                <button
-                    key={connector.uid}
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => connect({connector})}
-                >
-                    {isPending ? "Connecting…" : `Connect ${connector.name}`}
-                </button>
-            ))}
-            {error && <p className="error">{error.message}</p>}
-        </div>
+        <ConnectKitButton.Custom>
+            {({
+                isConnected,
+                isConnecting,
+                show,
+                hide,
+                address,
+                truncatedAddress,
+                chain,
+                ensName,
+            }) => {
+                if (isConnected) {
+                    const wrongChain =
+                        chain?.id !== undefined && chain.id !== 11155111;
+                    return (
+                        <div className="connect connect--online">
+                            <span
+                                className={
+                                    wrongChain
+                                        ? "badge badge--warn"
+                                        : "badge badge--net"
+                                }
+                                title={
+                                    wrongChain
+                                        ? "Wrong network — switch to Sepolia"
+                                        : "Sepolia testnet"
+                                }
+                            >
+                                {wrongChain ? "!" : "●"}{" "}
+                                {chain?.name ?? "Unknown"} ·{" "}
+                                {chain?.id ?? "—"}
+                            </span>
+                            <code className="address" onClick={show}>
+                                {ensName ?? truncatedAddress ?? address}
+                            </code>
+                            <button
+                                type="button"
+                                className="btn btn--ghost"
+                                onClick={show}
+                            >
+                                Manage
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn--danger-ghost"
+                                onClick={hide}
+                            >
+                                Disconnect
+                            </button>
+                        </div>
+                    );
+                }
+                return (
+                    <div className="connect">
+                        <button
+                            type="button"
+                            className="btn btn--primary"
+                            disabled={isConnecting}
+                            onClick={show}
+                        >
+                            {isConnecting ? (
+                                <>
+                                    <span className="blink">●</span>{" "}
+                                    Linking Wallet…
+                                </>
+                            ) : (
+                                <>
+                                    <span className="blink">▶</span>{" "}
+                                    Connect Wallet
+                                </>
+                            )}
+                        </button>
+                    </div>
+                );
+            }}
+        </ConnectKitButton.Custom>
     );
-}
-
-function shorten(addr?: string) {
-    if (!addr) return "";
-    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
