@@ -1,0 +1,26 @@
+{
+  "name": "x-web3",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Web3 monorepo: Vite + React + wagmi frontend, Foundry smart contracts deployed to Sepolia",
+  "packageManager": "pnpm@10.19.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @x-web3/web dev",
+    "build": "pnpm --filter @x-web3/web build",
+    "preview": "pnpm --filter @x-web3/web preview",
+    "deploy:aws": "bash scripts/deploy-aws.sh",
+    "lint": "pnpm -r --parallel run lint",
+    "contracts:compile": "pnpm --filter @x-web3/contracts compile",
+    "contracts:test": "pnpm --filter @x-web3/contracts test",
+    "contracts:deploy:sepolia": "pnpm --filter @x-web3/contracts deploy:sepolia",
+    "contracts:deploy:notepad:sepolia": "pnpm --filter @x-web3/contracts deploy:notepad:sepolia",
+    "contracts:verify:sepolia": "pnpm --filter @x-web3/contracts verify:sepolia",
+    "contracts:export:abi": "pnpm --filter @x-web3/contracts export:abi"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

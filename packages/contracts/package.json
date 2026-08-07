@@ -1,0 +1,28 @@
+{
+  "name": "@x-web3/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Foundry smart contracts — deploy to Sepolia",
+  "scripts": {
+    "compile": "forge build",
+    "test": "forge test",
+    "test:verbose": "forge test -vvv",
+    "coverage": "forge coverage",
+    "format": "forge fmt",
+    "format:check": "forge fmt --check",
+    "deploy:sepolia": "forge script script/DeployCounter.s.sol:DeployCounter --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
+    "deploy:sepolia:no-verify": "forge script script/DeployCounter.s.sol:DeployCounter --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
+    "deploy:notepad:sepolia": "forge script script/DeployNotepad.s.sol:DeployNotepad --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
+    "deploy:notepad:sepolia:no-verify": "forge script script/DeployNotepad.s.sol:DeployNotepad --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
+    "verify:sepolia": "forge verify-contract --chain sepolia --etherscan-api-key $ETHERSCAN_API_KEY --watch",
+    "export:abi": "node ./script/export-abi.mjs Counter Notepad",
+    "clean": "forge clean"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0",
+    "forge-std": "github:foundry-rs/forge-std#v1.9.6"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5"
+  }
+}
