@@ -154,6 +154,12 @@ stored in GitHub.
 The bootstrap role lives in `infra/aws/github-actions-role.yaml`. Repository
 variables used by the workflow are:
 
+The deployment job references the `production` GitHub Environment. Its AWS IAM
+trust policy therefore matches the environment-based OIDC subject rather than a
+branch-based subject. The repository uses GitHub's immutable OIDC subject format,
+including its owner and repository IDs. Restrict the `production` Environment's
+deployment branches to `main` in GitHub so only merges to `main` can deploy.
+
 | Variable | Purpose |
 | --- | --- |
 | `AWS_ROLE_ARN` | OIDC deployment role ARN |
@@ -186,6 +192,7 @@ new change to `main`.
 | --- | --- |
 | CloudFront returns an old release | Wait for the invalidation, then inspect browser cache. |
 | `AccessDenied` from S3 | Confirm the bucket policy source ARN matches the current distribution. |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Redeploy `infra/aws/github-actions-role.yaml` and confirm the role trusts the immutable `production` Environment subject. |
 | Custom domain TLS error | Certificate must be `ISSUED`, in us-east-1, and cover the exact hostname. |
 | CloudFormation alias error | Create the Cloudflare/ACM validation record first; then attach the issued certificate. |
 | Wallet UI loads but contract actions do not | Set deployed addresses in `deployments.ts` and confirm Sepolia RPC access. |

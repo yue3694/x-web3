@@ -2,14 +2,15 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: Least-privilege GitHub Actions OIDC role for x-web3 frontend releases.
 
 Parameters:
-  GitHubRepository:
+  GitHubRepositorySubject:
     Type: String
-    Default: yue3694/x-web3
-    AllowedPattern: "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
-  GitHubBranch:
+    Default: yue3694@293815570/x-web3@1324786278
+    Description: GitHub OIDC repository subject, including immutable owner and repository IDs.
+    AllowedPattern: "^[A-Za-z0-9_.-]+@[0-9]+/[A-Za-z0-9_.-]+@[0-9]+$"
+  GitHubEnvironment:
     Type: String
-    Default: main
-    AllowedPattern: "^[A-Za-z0-9_./-]+$"
+    Default: production
+    AllowedPattern: "^[A-Za-z0-9_.-]+$"
   SiteBucketName:
     Type: String
   DistributionId:
@@ -30,7 +31,7 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubRepository}:ref:refs/heads/${GitHubBranch}"
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubRepositorySubject}:environment:${GitHubEnvironment}"
       Policies:
         - PolicyName: PublishStaticSite
           PolicyDocument:
