@@ -41,7 +41,7 @@ x-web3/
 │       ├── src/                   # *.sol  (production)
 │       ├── test/                  # *.t.sol  (forge tests)
 │       ├── script/                # *.s.sol (deploy), *.mjs (ABI export)
-│       ├── lib/                   # forge-std, openzeppelin-contracts (git submodules)
+│       ├── node_modules/          # OZ + forge-std (pnpm-managed, no git submodules)
 │       ├── foundry.toml · remappings.txt
 │       └── .env.example
 │
@@ -85,9 +85,11 @@ copied from the on-chain source of truth at compile time**.
 
 - Reads `src/*.sol`, resolves imports via `remappings.txt`:
   ```
-  forge-std/=lib/forge-std/src/
-  @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+  forge-std/=node_modules/forge-std/src/
+  @openzeppelin/contracts/=node_modules/@openzeppelin/contracts/contracts/
   ```
+  These two packages are installed by pnpm (`package.json: dependencies`)
+  — no `forge install`, no `git submodule`, no `lib/` directory.
 - Produces `out/<ContractName>.sol/<ContractName>.json` — each artifact
   contains the bytecode, deployed bytecode, and the **ABI** (function
   signatures + event signatures + error signatures).

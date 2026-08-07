@@ -21,7 +21,9 @@ import {dirname, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = resolve(__dirname, "../..");
+// __dirname = .../packages/contracts/script
+// ../../../  = repo root (x-web3/)
+const root = resolve(__dirname, "../../..");
 const OUT_DIR = resolve(root, "apps/web/src/contracts");
 
 // Default: export everything this monorepo ships. Override by passing

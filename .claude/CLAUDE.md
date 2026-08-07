@@ -22,12 +22,13 @@ pnpm contracts:deploy:sepolia                   # deploy + 自动验证 Ethersca
 pnpm --filter @x-web3/contracts export:abi      # 把 ABI 拷到 apps/web/src/contracts
 ```
 
-合约子模块（首次或更新时）：
+合约依赖（OpenZeppelin + forge-std）走 npm，不需要 `forge install`：
+
 ```bash
-cd packages/contracts
-forge install OpenZeppelin/openzeppelin-contracts --no-commit
-forge install foundry-rs/forge-std --no-commit
+pnpm install     # 自动拉 @openzeppelin/contracts + forge-std 到 packages/contracts/node_modules
 ```
+
+`remappings.txt` 把 forge 指向 `node_modules/`——不用 git submodule，没有 `.gitmodules`。
 
 ## 目录结构
 
@@ -36,8 +37,8 @@ forge install foundry-rs/forge-std --no-commit
 ├── apps/
 │   └── web/
 │       ├── src/
-│       │   ├── components/   # ConnectButton, CounterCard
-│       │   ├── contracts/    # counter.abi.ts, deployments.ts  ← 由 export:abi 生成
+│       │   ├── components/   # ConnectButton, Notepad
+│       │   ├── contracts/    # counter.abi.ts, notepad.abi.ts, deployments.ts  ← 由 export:abi 生成
 │       │   ├── App.tsx · main.tsx · wagmi.ts · styles.css
 │       └── vite.config.ts · tsconfig.json
 ├── packages/
@@ -45,7 +46,7 @@ forge install foundry-rs/forge-std --no-commit
 │       ├── src/              # *.sol 生产合约
 │       ├── test/             # *.t.sol
 │       ├── script/           # Deploy*.s.sol + export-abi.mjs
-│       ├── lib/              # git submodules (forge-std, openzeppelin-contracts)
+│       ├── node_modules/     # OZ + forge-std (pnpm 管理，gitignore)
 │       └── foundry.toml · remappings.txt
 ├── package.json · pnpm-workspace.yaml
 ├── .env.example · .gitignore · README.md

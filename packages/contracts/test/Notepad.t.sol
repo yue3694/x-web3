@@ -53,6 +53,13 @@ contract NotepadTest is Test {
     string constant TITLE = "Hello";
     string constant BODY = "World";
 
+    // 与 Notepad.sol 中的 `public constant` 镜像。Solidity 不允许从外部合约
+    // 用 `Notepad.MAX_TITLE_LEN` 直接读 `public constant`（那只是 ABI getter，
+    // 不是编译期成员），所以这里再声明一遍；改动源文件常量时记得同步。
+    uint256 internal constant TITLE_MAX = 64;
+    uint256 internal constant BODY_MAX = 1024;
+    uint256 internal constant PER_USER_MAX = 50;
+
     function setUp() public {
         // Notepad 没有构造函数参数——部署即可。
         notepad = new Notepad();
@@ -124,7 +131,7 @@ contract NotepadTest is Test {
     /// @notice 标题超过 MAX_TITLE_LEN 时应 revert `TitleTooLong`。
     /// @dev    边界值测试：传 MAX+1 字节，恰好越界。
     function test_CreateNote_RevertsTitleTooLong() public {
-        string memory tooLong = _bytesOfLength(Notepad.MAX_TITLE_LEN + 1);
+        string memory tooLong = _bytesOfLength(TITLE_MAX + 1);
         vm.prank(alice);
         vm.expectRevert(Notepad.TitleTooLong.selector);
         notepad.createNote(tooLong, BODY);
@@ -132,7 +139,7 @@ contract NotepadTest is Test {
 
     /// @notice 正文超过 MAX_BODY_LEN 时应 revert `BodyTooLong`。
     function test_CreateNote_RevertsBodyTooLong() public {
-        string memory tooLong = _bytesOfLength(Notepad.MAX_BODY_LEN + 1);
+        string memory tooLong = _bytesOfLength(BODY_MAX + 1);
         vm.prank(alice);
         vm.expectRevert(Notepad.BodyTooLong.selector);
         notepad.createNote(TITLE, tooLong);
@@ -142,7 +149,7 @@ contract NotepadTest is Test {
     /// @dev    上限测试：循环创建到上限，再次创建必须失败。
     ///         跑得慢一些（51 次合约调用 + 断言），但属于关键不变量。
     function test_CreateNote_RevertsTooManyNotes() public {
-        for (uint256 i = 0; i < Notepad.MAX_NOTES_PER_USER; i++) {
+        for (uint256 i = 0; i < PER_USER_MAX; i++) {
             _createAs(alice, "t", "b");
         }
         // 第 51 次创建应失败。
@@ -192,7 +199,7 @@ contract NotepadTest is Test {
     ///         存在也仍然抛 `BodyTooLong`，证明顺序符合预期。
     function test_UpdateNote_RevertsBodyTooLong() public {
         uint256 id = _createAs(alice, TITLE, BODY);
-        string memory tooLong = _bytesOfLength(Notepad.MAX_BODY_LEN + 1);
+        string memory tooLong = _bytesOfLength(BODY_MAX + 1);
         vm.prank(alice);
         vm.expectRevert(Notepad.BodyTooLong.selector);
         notepad.updateNote(id, TITLE, tooLong);
@@ -324,8 +331,8 @@ contract NotepadTest is Test {
     ///         后同上（甚至做 no-op update 也不破坏字段）。
     function testFuzz_CreateAndUpdate(string calldata title, string calldata body) public {
         // 长度越界的输入由专门的 revert 测试覆盖——这里只 fuzz 合法区间。
-        vm.assume(bytes(title).length <= Notepad.MAX_TITLE_LEN);
-        vm.assume(bytes(body).length <= Notepad.MAX_BODY_LEN);
+        vm.assume(bytes(title).length <= TITLE_MAX);
+        vm.assume(bytes(body).length <= BODY_MAX);
 
         vm.prank(alice);
         uint256 id = notepad.createNote(title, body);

@@ -11,19 +11,17 @@
 ## 0. 准备工作
 
 ```bash
-# 一次性
+# 一次性：装 Foundry（仅编译/测试/部署需要，前端不需要）
 curl -L https://foundry.paradigm.xyz | bash && foundryup
 
-# 在仓库根
+# 一次性：装 JS / Solidity 依赖（pnpm 走 npm/CDN，比 forge install 快得多）
 cd /Users/huyi/Documents/Coding/github/x-web3
 pnpm install
+# ↑ 这一步会把 @openzeppelin/contracts + forge-std 装到 packages/contracts/node_modules/
+#   remappings.txt 已经指向那里，forge build 直接读得到。
 
-# 装子模块（Counter 依赖 OZ，Notepad.t.sol 依赖 forge-std）
+# 跑测试，确认环境正常
 cd packages/contracts
-forge install OpenZeppelin/openzeppelin-contracts --no-commit
-forge install foundry-rs/forge-std --no-commit
-
-# 跑一遍测试，确认环境正常
 forge test
 # 预期：17 passed (Counter 5 + Notepad 12 + 1 fuzz 在 Notepad 内)
 ```
@@ -79,15 +77,19 @@ forge test
 
 **重点看**：
 ```
-forge-std/=lib/forge-std/src/
-@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+forge-std/=node_modules/forge-std/src/
+@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/contracts/
 ```
 
-它告诉编译器："代码里写 `import "forge-std/Test.sol";` 时，去 `lib/forge-std/src/Test.sol` 找"。
+它告诉编译器："代码里写 `import "forge-std/Test.sol";` 时，去
+`packages/contracts/node_modules/forge-std/src/Test.sol` 找"。
+
+这两个包都由 pnpm 安装（见 `package.json` 的 `dependencies`），**不**走
+`forge install`/git submodule。
 
 **陷阱**：
 - 路径写错 → 编译报"Source not found"。
-- 路径写对但 `lib/` 下没装子模块 → 同样错。
+- `node_modules/` 软链失效（删了再 `pnpm install`） → 同样错。
 - 多个 remappings 互相冲突 → 静默使用其中之一，难以察觉。
 
 ---
@@ -109,7 +111,7 @@ forge-std/=lib/forge-std/src/
 **推荐练习**：
 1. 给 Counter 加一个 `multiply(uint256 n)` 函数，自己写测试验证。
 2. 给 Counter 加一个 `decrementBy(uint256 n)` 函数（不能减成负数）。
-3. 看 OpenZeppelin 源码 `lib/openzeppelin-contracts/contracts/access/Ownable.sol`，了解 `onlyOwner` 的实现。
+3. 看 OpenZeppelin 源码 `node_modules/@openzeppelin/contracts/contracts/access/Ownable.sol`，了解 `onlyOwner` 的实现。
 
 **陷阱**：
 - 改 `public` 到 `private` 时记得 ABI 不再有 getter。
@@ -156,7 +158,7 @@ forge-std/=lib/forge-std/src/
 **推荐练习**：
 1. 用 `console.log` 在 `setUp` 后打印 `counter` 地址。
 2. 加一个 `test_IncrementFuzz` 函数 `testFuzz_Increment(uint8 n)`，验证连续调用 n 次后 count == n。
-3. 看 forge-std 源码 `lib/forge-std/src/Test.sol`，了解所有 cheatcode。
+3. 看 forge-std 源码 `node_modules/forge-std/src/Test.sol`，了解所有 cheatcode。
 
 **陷阱**：
 - `vm.expectRevert` 必须在被测调用**之前**调用——放反了就 miss。

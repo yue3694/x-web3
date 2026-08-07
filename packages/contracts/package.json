@@ -18,6 +18,10 @@
     "export:abi": "node ./script/export-abi.mjs Counter Notepad",
     "clean": "forge clean"
   },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0",
+    "forge-std": "github:foundry-rs/forge-std#v1.9.6"
+  },
   "devDependencies": {
     "dotenv": "^16.4.5"
   }

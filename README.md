@@ -30,7 +30,8 @@ You'll also need:
 ## First-time setup
 
 ```bash
-# 1. install JS deps
+# 1. install JS deps (this also pulls OpenZeppelin Contracts + forge-std
+#    for the contracts package — no `forge install` step required)
 pnpm install
 
 # 2. configure env (root + each package's .env.example is your template)
@@ -38,13 +39,10 @@ cp .env.example .env
 cp packages/contracts/.env.example packages/contracts/.env
 cp apps/web/.env.example apps/web/.env
 # …fill in SEPOLIA_RPC_URL, ETHERSCAN_API_KEY, DEPLOYER_PRIVATE_KEY
-
-# 3. install Foundry libs into the contracts package
-cd packages/contracts
-forge install OpenZeppelin/openzeppelin-contracts --no-commit
-forge install foundry-rs/forge-std --no-commit
-cd -
 ```
+
+That's it — no `forge install`, no `git submodule update`. Foundry reads
+`packages/contracts/node_modules/` via `remappings.txt`.
 
 ## Daily workflow
 
@@ -76,6 +74,9 @@ After the first deploy, paste the printed address into
   the contract ↔ frontend ABI bridge, Sepolia deploy pipeline, Notepad
   storage invariants (swap-and-pop, monotonic ids), local dev workflow,
   and a cookbook for adding new contracts.
+- **[docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md)** — registry of deployed
+  contract addresses (Sepolia Notepad, etc.) with tx hashes, Etherscan
+  links, and redeploy instructions.
 - **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — repeatable AWS S3 + CloudFront
   deployment, custom-domain certificate setup, and Cloudflare DNS automation.
 

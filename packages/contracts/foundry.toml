@@ -6,14 +6,24 @@
 [profile.default]
 src = "src"
 out = "out"
-libs = ["lib"]
+# OZ contracts + forge-std come from npm (see remappings.txt + package.json),
+# not git submodules. `libs` is searched only for *unremapped* imports, but
+# listing `node_modules` here also helps forge resolve bare-package paths
+# (e.g. `import "forge-std/Test.sol"`) cleanly without remappings.
+libs = ["node_modules", "lib"]
 test = "test"
 script = "script"
 solc_version = "0.8.24"
 optimizer = true
 optimizer_runs = 200
 via_ir = false
-fs_permissions = [{ access = "read", path = "./" }]
+# Read access to the whole package root so forge can read .sol sources
+# from anywhere — including node_modules/. This is a permissive setting
+# because we're not running untrusted scripts; tighten if that changes.
+fs_permissions = [
+    { access = "read", path = "./" },
+    { access = "read", path = "./node_modules" },
+]
 auto_detect_solc = false
 
 # Verbose revert reasons in tests.
