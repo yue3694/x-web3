@@ -72,6 +72,14 @@ to run just one package, hoisted dependency dedup.
 This is the key idea — **the frontend never invents the ABI; it is always
 copied from the on-chain source of truth at compile time**.
 
+![Frontend and Notepad contract interaction sequence](assets/x-web3-frontend-contract-sequence.png)
+
+The sequence diagram covers the complete runtime cycle: wallet connection and
+initial `eth_call`, signed create/update/delete transactions, contract checks
+and storage effects, receipt confirmation, and the final query refresh. Notes
+remain isolated under `_notes[msg.sender]`; the frontend only renders ABI-decoded
+contract state.
+
 ```
 ┌─────────────────────┐                  ┌─────────────────────┐
 │ packages/contracts  │                  │ apps/web            │
