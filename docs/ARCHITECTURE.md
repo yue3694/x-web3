@@ -4,6 +4,15 @@
 > Sepolia deploy pipeline. Read this top-to-bottom once and you'll understand
 > every moving part.
 
+![x-web3 cyberpunk architecture overview](assets/x-web3-cyberpunk-architecture.png)
+
+The diagram summarizes the three main paths described in this document:
+
+- **Runtime:** wallet → React/wagmi → Sepolia RPC → `Notepad.sol`.
+- **Contract toolchain:** Solidity → Forge → generated ABI → typed React hooks.
+- **Delivery:** merge to `main` → GitHub Actions OIDC → private S3 and
+  CloudFront/ACM → `notes.inxyu.cn`.
+
 ---
 
 ## 1. What is this project?
