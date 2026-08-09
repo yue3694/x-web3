@@ -4,9 +4,11 @@ package rbac
 import (
 	"context"
 	"errors"
+	"net/http"
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -124,5 +126,29 @@ func (e *Engine) Require(code string) func(ctx context.Context, userID uuid.UUID
 			return errors.New("rbac: forbidden")
 		}
 		return nil
+	}
+}
+
+// Middleware adapts permission checks to Gin after auth.Middleware has set user_id.
+func (e *Engine) Middleware(code string) gin.HandlerFunc {
+	require := e.Require(code)
+	return func(c *gin.Context) {
+		userID, err := uuid.Parse(c.GetString("user_id"))
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{
+				"code": "UNAUTHORIZED", "message": "authentication required",
+				"requestId": c.GetString("request_id"),
+			}})
+			return
+		}
+		if err := require(c.Request.Context(), userID); err != nil {
+			e.logger.Warn("permission_denied", zap.String("permission", code), zap.String("user_id", userID.String()))
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{
+				"code": "FORBIDDEN", "message": "permission denied",
+				"requestId": c.GetString("request_id"),
+			}})
+			return
+		}
+		c.Next()
 	}
 }

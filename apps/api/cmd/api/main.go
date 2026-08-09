@@ -35,6 +35,7 @@ import (
 	"github.com/x-web3/api/internal/handlers"
 	"github.com/x-web3/api/internal/httpkit"
 	"github.com/x-web3/api/internal/rbac"
+	"github.com/x-web3/api/internal/user"
 	"github.com/x-web3/api/internal/wallet"
 )
 
@@ -85,7 +86,7 @@ func main() {
 	sessionStore := auth.NewSessionStore(rdb, cfg.SessionSecret, cfg.SessionTTL)
 	nonceStore := wallet.NewNonceStore(rdb, cfg.WalletNonceTTL)
 	auditWriter := audit.NewWriter(pool, logger)
-	_ = rbac.NewEngine(pool, logger) // reserved for admin/review middleware (F06/F02)
+	rbacEngine := rbac.NewEngine(pool, logger)
 	walletSvc := wallet.NewService(pool, nonceStore, cfg.APIDomain, auditWriter)
 
 	router := httpkit.NewRouter(logger, cfg.WebOrigin)
@@ -113,17 +114,22 @@ func main() {
 
 	authGroup := v1.Group("/auth")
 	{
-		authGroup.POST("/privy/session", httpkit.Wrap(authH.PostPrivySession))
+		authGroup.POST("/privy/session", httpkit.RateLimit(rdb, "login", cfg.LoginRateLimit, httpkit.ClientIPKey), httpkit.Wrap(authH.PostPrivySession))
 		authGroup.DELETE("/session", httpkit.Wrap(authH.DeleteSession))
 	}
 	meGroup := v1.Group("/me")
 	meGroup.Use(auth.Middleware(verifier, sessionStore, pool))
 	{
 		meGroup.GET("", httpkit.Wrap(meH.GetMe))
-		meGroup.POST("/wallets/nonce", httpkit.Wrap(walletH.IssueNonce))
-		meGroup.POST("/wallets/link", httpkit.Wrap(walletH.Link))
-		meGroup.DELETE("/wallets/:walletId", httpkit.Wrap(walletH.Unbind))
+		walletLimit := httpkit.RateLimit(rdb, "wallet", cfg.WalletRateLimit, httpkit.UserIDKeyFunc)
+		meGroup.POST("/wallets/nonce", walletLimit, httpkit.Wrap(walletH.IssueNonce))
+		meGroup.POST("/wallets/link", walletLimit, httpkit.Wrap(walletH.Link))
+		meGroup.DELETE("/wallets/:walletId", walletLimit, httpkit.Wrap(walletH.Unbind))
 	}
+
+	adminGroup := v1.Group("/admin")
+	adminGroup.Use(auth.Middleware(verifier, sessionStore, pool), rbacEngine.Middleware(user.PermSystemAdmin))
+	adminGroup.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 
 	logger.Info("api_starting",
 		zap.String("env", cfg.Env),

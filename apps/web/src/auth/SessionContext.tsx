@@ -83,15 +83,16 @@ export function SessionProvider({
 
     const hasPermission = useCallback(
         (code: string) => {
-            if (!profile) return false;
-            if (profile.roles.includes("super_admin")) return true;
-            return profile.permissions.includes(code);
+            const roles = profile?.roles ?? [];
+            const perms = profile?.permissions ?? [];
+            if (roles.includes("super_admin")) return true;
+            return perms.includes(code);
         },
         [profile],
     );
 
     const hasRole = useCallback(
-        (code: RoleCode) => Boolean(profile?.roles.includes(code)),
+        (code: RoleCode) => (profile?.roles ?? []).includes(code),
         [profile],
     );
 

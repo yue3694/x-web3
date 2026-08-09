@@ -36,15 +36,24 @@ func Middleware(verifier Verifier, store *SessionStore, pool *pgxpool.Pool) gin.
 			return
 		}
 		// Resolve subject → user_id (lazy DB lookup; 结果放 ctx)。
-		const q = `SELECT id FROM users WHERE privy_user_id = $1`
+		const q = `SELECT id, status FROM users WHERE privy_user_id = $1`
 		var uid uuid.UUID
-		err = pool.QueryRow(c.Request.Context(), q, data.Subject).Scan(&uid)
+		var status string
+		err = pool.QueryRow(c.Request.Context(), q, data.Subject).Scan(&uid, &status)
 		if errors.Is(err, pgx.ErrNoRows) {
 			respond401(c, "user missing")
 			return
 		}
 		if err != nil {
 			respond401(c, "user lookup failed")
+			return
+		}
+		if status != "active" {
+			_ = store.Destroy(c.Request.Context(), sid)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{
+				"code": string(errcode.Forbidden), "message": "account unavailable",
+				"requestId": c.GetString("request_id"),
+			}})
 			return
 		}
 		c.Set("user_id", uid.String())

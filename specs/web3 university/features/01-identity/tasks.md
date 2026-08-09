@@ -4,17 +4,17 @@
 
 ## 任务列表
 
-- [ ] **F01-T01** 创建 `apps/api/` Go module（go.mod、cmd/api、internal 分层） `api:apps/api/` ~2h
-- [ ] **F01-T02** migration：users / wallets / roles / permissions / user_roles / role_permissions / audit_logs `database:database/migrations/0001_identity.sql` ~3h
-- [ ] **F01-T03** sqlc / pgx repository：users / wallets / roles / permissions `api:apps/api/internal/user/` ~4h
+- [x] **F01-T01** 创建 `apps/api/` Go module（go.mod、cmd/api、internal 分层） `api:apps/api/` ~2h
+- [x] **F01-T02** migration：users / wallets / roles / permissions / user_roles / role_permissions / audit_logs `database:database/migrations/0001_identity.sql` ~3h
+- [x] **F01-T03** sqlc / pgx repository：users / wallets / roles / permissions `api:apps/api/internal/user/` ~4h
 - [ ] **F01-T04** Privy JWT verifier + JWKS 缓存 + session 创建/刷新/销毁 `api:apps/api/internal/auth/` ~6h
-- [ ] **F01-T05** RBAC middleware + permission 缓存 + 对象级 service hook `api:apps/api/internal/rbac/` ~5h
-- [ ] **F01-T06** 钱包绑定：nonce 签名校验 + 唯一性冲突 + 解绑保护 `api:apps/api/internal/wallet/` ~6h
-- [ ] **F01-T07** Audit append-only writer + correlation ID 注入 `api:apps/api/internal/audit/` ~3h
-- [ ] **F01-T08** OpenAPI：auth / me / wallets 路由契约 `shared:packages/shared/openapi/auth.yaml` ~4h
-- [ ] **F01-T09** 角色种子数据 + 启动时校验 `database:database/seed/0001_roles.sql` ~1h
-- [ ] **F01-T10** 前端：PrivyProvider / SessionBootstrap / RequireAuth / PermissionContext `web:apps/web/src/auth/` ~6h
-- [ ] **F01-T11** 前端：钱包绑定弹窗 + 网络/余额显示 `web:apps/web/src/auth/WalletLink.tsx` ~4h
+- [x] **F01-T05** RBAC middleware + permission 缓存 + 对象级 service hook `api:apps/api/internal/rbac/` ~5h
+- [x] **F01-T06** 钱包绑定：nonce 签名校验 + 唯一性冲突 + 解绑保护 `api:apps/api/internal/wallet/` ~6h
+- [x] **F01-T07** Audit append-only writer + correlation ID 注入 `api:apps/api/internal/audit/` ~3h
+- [x] **F01-T08** OpenAPI：auth / me / wallets 路由契约 `shared:packages/shared/openapi/auth.yaml` ~4h
+- [x] **F01-T09** 角色种子数据 + 启动时校验 `database:database/seed/0001_roles.sql` ~1h
+- [x] **F01-T10** 前端：PrivyProvider / SessionBootstrap / RequireAuth / PermissionContext `web:apps/web/src/auth/` ~6h
+- [x] **F01-T11** 前端：钱包绑定弹窗 + 网络/余额显示 `web:apps/web/src/auth/WalletLink.tsx` ~4h
 - [ ] **F01-T12** 集成测试：testcontainers + 完整开户/绑定/解绑路径 `api:apps/api/internal/**/*_test.go` ~6h
 - [ ] **F01-T13** 单元测试：JWT verifier、ecrecover、RBAC matrix、审计写入 `api:apps/api/internal/**/*_test.go` ~5h
 - [ ] **F01-T14** E2E 骨架（Playwright + Privy stub） `web:apps/web/e2e/auth.spec.ts` ~4h
@@ -27,7 +27,7 @@
 
 ## 退出条件（DoD）
 
-- [ ] `forge fmt --check`（合约本特性无新增）/ `gofmt -l` 0 警告。
+- [x] `gofmt -l` 0 警告（`forge fmt --check` 仍有本特性外的既有格式差异）。
 - [ ] `go test ./internal/auth/... ./internal/rbac/... ./internal/wallet/...` 全绿，覆盖率 ≥ 80%。
 - [ ] 集成测试通过 testcontainers PostgreSQL + Redis。
 - [ ] OpenAPI 通过 schema 校验；前端 client 由 generator 生成。

@@ -36,8 +36,10 @@ type Config struct {
 	CookieSecure  bool
 
 	// Wallet
-	APIDomain      string // EIP-191 签名 domain
-	WalletNonceTTL time.Duration
+	APIDomain       string // EIP-191 签名 domain
+	WalletNonceTTL  time.Duration
+	LoginRateLimit  int
+	WalletRateLimit int
 
 	// Logging
 	LogLevel string
@@ -69,6 +71,8 @@ func Load() (*Config, error) {
 		CookieSecure:    getEnvBool("SESSION_COOKIE_SECURE", false),
 		APIDomain:       getEnv("API_DOMAIN", "localhost:8080"),
 		WalletNonceTTL:  time.Duration(getEnvInt("WALLET_NONCE_TTL_SECONDS", 300)) * time.Second,
+		LoginRateLimit:  getEnvInt("LOGIN_RATE_LIMIT_PER_MINUTE", 10),
+		WalletRateLimit: getEnvInt("WALLET_RATE_LIMIT_PER_MINUTE", 5),
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
 	}
 
@@ -81,6 +85,9 @@ func Load() (*Config, error) {
 	}
 	if len(c.SessionSecret) < 32 {
 		errs = append(errs, "SESSION_SECRET must be at least 32 bytes")
+	}
+	if c.LoginRateLimit < 1 || c.WalletRateLimit < 1 {
+		errs = append(errs, "rate limits must be positive")
 	}
 	if (c.Env == "staging" || c.IsProd()) && c.PrivyDevStub {
 		errs = append(errs, "PRIVY_DEV_STUB must be disabled outside development")

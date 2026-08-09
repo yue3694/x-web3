@@ -114,6 +114,33 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ApiError' }
 
+  /me/wallets/nonce:
+    post:
+      tags: [wallets]
+      summary: 创建一次性钱包签名 challenge
+      operationId: postWalletNonce
+      responses:
+        '200':
+          description: challenge 已创建
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [nonce, domain, expiresAt]
+                properties:
+                  nonce: { type: string, minLength: 16, maxLength: 64 }
+                  domain: { type: string }
+                  expiresAt: { type: string, format: date-time }
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '429':
+          description: 请求过于频繁
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
   /me/wallets/{walletId}:
     delete:
       tags: [wallets]
