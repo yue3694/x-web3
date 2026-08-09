@@ -1,0 +1,565 @@
+openapi: 3.0.3
+info:
+  title: x-web3 University — Course / Media / Comments API
+  version: 0.2.0
+  description: |
+    公开课程目录 + 老师编辑器 + 评论与审核 API。
+    鉴权方式：会话 cookie（与 `auth.yaml` 一致）。
+servers:
+  - url: https://api.x-web3.example.com/api/v1
+    description: Production
+  - url: http://localhost:8080/api/v1
+    description: Local dev
+tags:
+  - name: catalog
+    description: 公开列表 / 详情
+  - name: teacher
+    description: 老师编辑器（草稿/章节/媒体）
+  - name: courseAdmin
+    description: 审核 / 归档
+  - name: media
+    description: 视频 / 课件上传
+  - name: comments
+    description: 评论与审核
+  - name: learning
+    description: 播放凭证签发
+paths:
+  /courses:
+    get:
+      tags: [catalog]
+      operationId: listCourses
+      summary: 课程公开列表（带缓存 + cursor 分页）
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: teacherId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: priceMin
+          schema: { type: integer, minimum: 0 }
+        - in: query
+          name: priceMax
+          schema: { type: integer, minimum: 0 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - in: query
+          name: before
+          description: cursor（`<RFC3339Nano>,<uuid>`）
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Course' } }
+                  nextCursor: { type: string, nullable: true }
+  /courses/{id}:
+    get:
+      tags: [catalog]
+      operationId: getCourse
+      summary: 课程详情（登录用户若已购买则 enrolled=true）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  course: { $ref: '#/components/schemas/Course' }
+                  chapters: { type: array, items: { $ref: '#/components/schemas/Chapter' } }
+                  enrolled: { type: boolean }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /teacher/courses:
+    post:
+      tags: [teacher]
+      operationId: createCourse
+      summary: 创建 draft 课程
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseWriteRequest' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            ETag: { schema: { type: string }, description: currentVersion }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Course' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /teacher/courses/{id}:
+    put:
+      tags: [teacher]
+      operationId: updateCourse
+      summary: 更新 draft（乐观锁）
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseWriteRequest' }
+      responses:
+        '200':
+          description: OK
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Course' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /teacher/courses/{id}/curriculum:
+    put:
+      tags: [teacher]
+      operationId: replaceCurriculum
+      summary: 替换整棵章节树（乐观锁）
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CurriculumRequest' }
+      responses:
+        '200':
+          description: OK
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currentVersion: { type: integer }
+                  chapters: { $ref: '#/components/schemas/CurriculumRequest/properties/chapters' }
+  /teacher/courses/{id}/submit:
+    post:
+      tags: [teacher]
+      operationId: submitCourse
+      summary: draft → pending_review
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Course' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/courses/{id}/review:
+    post:
+      tags: [courseAdmin]
+      operationId: reviewCourse
+      summary: approve / reject
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [approve, reject] }
+                reason: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Course' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/courses/{id}/archive:
+    post:
+      tags: [courseAdmin]
+      operationId: archiveCourse
+      summary: published → archived
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Course' }
+  /teacher/media/upload-intent:
+    post:
+      tags: [media]
+      operationId: createMediaUploadIntent
+      summary: 创建 media_assets(draft) + 颁发 presigned PUT
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, contentType, sizeBytes]
+              properties:
+                fileName: { type: string }
+                contentType: { type: string, enum: [video/mp4, video/webm, video/quicktime, application/pdf] }
+                sizeBytes: { type: integer, format: int64, minimum: 1 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mediaAssetId: { type: string, format: uuid }
+                  s3Key: { type: string }
+                  uploadUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        '413':
+          description: Payload too large
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /teacher/media/{id}/finalize:
+    post:
+      tags: [media]
+      operationId: finalizeMedia
+      summary: HeadObject + checksum 校验 → status=ready
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                checksumSha256: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaAsset' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /teacher/media:
+    get:
+      tags: [media]
+      operationId: listMyMedia
+      summary: 当前用户上传的 asset 列表
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/MediaAsset' } }
+  /teacher/lessons/{id}/preview:
+    get:
+      tags: [learning]
+      operationId: previewLesson
+      summary: 老师预览 draft lesson（purpose=preview）
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlaybackCredential' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /lessons/{id}/playback:
+    get:
+      tags: [learning]
+      operationId: issuePlayback
+      summary: 已购买学生播放凭证（TTL ≤ 5 min）
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlaybackCredential' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /courses/{id}/comments:
+    get:
+      tags: [comments]
+      operationId: listCourseComments
+      summary: 课程的评论列表（自己看到全部，其他人只看 approved）
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Comment' } }
+    post:
+      tags: [comments]
+      operationId: postComment
+      summary: 已购买用户在课程下写评论
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+        '403':
+          description: 未购买 / body 不合规
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /courses/comments/{id}:
+    delete:
+      tags: [comments]
+      operationId: deleteMyComment
+      summary: 用户软删自己的评论
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: No Content }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/comments/{id}:
+    patch:
+      tags: [comments]
+      operationId: moderateComment
+      summary: 管理员审批
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [approved, rejected] }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: xweb3_sid
+  schemas:
+    Course:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        teacherId: { type: string, format: uuid }
+        teacherName: { type: string }
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [draft, pending_review, published, archived] }
+        currentVersion: { type: integer }
+        priceMinor: { type: integer, format: int64 }
+        currency: { type: string }
+        publishedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CourseWriteRequest:
+      type: object
+      required: [title]
+      properties:
+        slug: { type: string }
+        title: { type: string, maxLength: 160 }
+        description: { type: string }
+        priceMinor: { type: integer, format: int64, minimum: 0 }
+        currency: { type: string, minLength: 3, maxLength: 8 }
+    Chapter:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer }
+        title: { type: string }
+        lessons:
+          type: array
+          items: { $ref: '#/components/schemas/Lesson' }
+    Lesson:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer }
+        title: { type: string }
+        required: { type: boolean }
+        durationSeconds: { type: integer }
+        mediaAssetId: { type: string, format: uuid, nullable: true }
+    CurriculumRequest:
+      type: object
+      required: [chapters]
+      properties:
+        chapters:
+          type: array
+          items:
+            type: object
+            required: [title, lessons]
+            properties:
+              title: { type: string }
+              lessons:
+                type: array
+                items:
+                  type: object
+                  required: [title]
+                  properties:
+                    title: { type: string }
+                    required: { type: boolean }
+                    durationSeconds: { type: integer }
+                    mediaAssetId: { type: string, format: uuid, nullable: true }
+    MediaAsset:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        ownerUserId: { type: string, format: uuid }
+        s3Key: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        status: { type: string, enum: [draft, ready, failed] }
+        scanStatus: { type: string, enum: [pending, clean, infected] }
+        checksumSha256: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Comment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        courseId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        userDisplayName: { type: string }
+        body: { type: string }
+        moderationStatus: { type: string, enum: [pending, approved, rejected] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PlaybackCredential:
+      type: object
+      properties:
+        lessonId: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
+        purpose: { type: string, enum: [playback, preview] }
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            requestId: { type: string }
+            details: { type: object, additionalProperties: true }
+  responses:
+    BadRequest:
+      description: Bad request
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Unauthorized:
+      description: Unauthorized
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Forbidden:
+      description: Forbidden
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Conflict:
+      description: Conflict (STALE_VERSION / COURSE_STATE_CONFLICT / etc.)
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Unprocessable:
+      description: Unprocessable entity (MEDIA_CHECKSUM_MISMATCH etc.)
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }

@@ -98,6 +98,10 @@ type Repo struct{ pool *pgxpool.Pool }
 
 func NewRepo(pool *pgxpool.Pool) *Repo { return &Repo{pool: pool} }
 
+// Pool 暴露底层 pool 给 catalog 等需要跨包查询的子系统。
+// 避免给 Repo 加一堆透传方法；调用方应只做只读查询。
+func (r *Repo) Pool() *pgxpool.Pool { return r.pool }
+
 func (r *Repo) Create(ctx context.Context, in CreateInput) (*Course, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {

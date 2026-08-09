@@ -32,6 +32,11 @@ const (
 	ActionCourseReview  Action = "course.review"
 	ActionOrderCreated  Action = "order.created"
 	ActionChainReplayed Action = "chain.replayed"
+	ActionMediaIntentCreated Action = "media.intent_created"
+	ActionMediaFinalized     Action = "media.finalized"
+	ActionCommentCreated     Action = "comment.created"
+	ActionCommentModerated   Action = "comment.moderated"
+	ActionPlaybackIssued     Action = "playback.issued"
 )
 
 // Entry 是单条审计写入参数。

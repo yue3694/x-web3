@@ -49,6 +49,9 @@ func prefixedHash(message string) []byte {
 	return crypto.Keccak256([]byte(prefix))
 }
 
+// PrefixedHashForTest 暴露给测试包用于本地签名生成；生产代码请勿调用。
+func PrefixedHashForTest(message string) []byte { return prefixedHash(message) }
+
 // CanonicalMessage 构造绑定场景下要签名的字符串。客户端必须用同样模板签名。
 // 模板与 F01 design 文档 "钱包绑定 nonce 签名" 一节一致：
 //

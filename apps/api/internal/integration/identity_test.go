@@ -11,7 +11,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/x-web3/api/internal/auth"
@@ -19,23 +18,6 @@ import (
 	"github.com/x-web3/api/internal/review"
 	"github.com/x-web3/api/internal/user"
 )
-
-func testPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	databaseURL := os.Getenv("DATABASE_URL_TEST")
-	if databaseURL == "" {
-		t.Skip("DATABASE_URL_TEST is not set")
-	}
-	pool, err := pgxpool.New(context.Background(), databaseURL)
-	if err != nil {
-		t.Fatalf("pgxpool.New: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	if err := pool.Ping(context.Background()); err != nil {
-		t.Fatalf("database ping: %v", err)
-	}
-	return pool
-}
 
 func TestCourseLifecycleOptimisticLockAndCatalog(t *testing.T) {
 	pool := testPool(t)

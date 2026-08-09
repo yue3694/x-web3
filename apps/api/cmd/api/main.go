@@ -9,9 +9,9 @@
 //  6. Session store
 //  7. RBAC engine
 //  8. Audit writer
-//  9. HTTP router + handlers
-//
-// 10. graceful shutdown
+//  9. Catalog service（带缓存订阅）
+// 10. HTTP router + handlers
+// 11. graceful shutdown
 package main
 
 import (
@@ -31,10 +31,15 @@ import (
 
 	"github.com/x-web3/api/internal/audit"
 	"github.com/x-web3/api/internal/auth"
+	"github.com/x-web3/api/internal/catalog"
+	"github.com/x-web3/api/internal/comment"
 	"github.com/x-web3/api/internal/config"
 	"github.com/x-web3/api/internal/course"
 	"github.com/x-web3/api/internal/handlers"
 	"github.com/x-web3/api/internal/httpkit"
+	"github.com/x-web3/api/internal/learning"
+	"github.com/x-web3/api/internal/media"
+	"github.com/x-web3/api/internal/objectstore"
 	"github.com/x-web3/api/internal/rbac"
 	"github.com/x-web3/api/internal/user"
 	"github.com/x-web3/api/internal/wallet"
@@ -90,6 +95,17 @@ func main() {
 	rbacEngine := rbac.NewEngine(pool, logger)
 	walletSvc := wallet.NewService(pool, nonceStore, cfg.APIDomain, auditWriter)
 
+	// 业务子系统
+	courseRepo := course.NewRepo(pool)
+	catalogSvc := catalog.NewService(courseRepo, rdb)
+	mediaRepo := media.NewRepo(pool)
+	commentRepo := comment.NewRepo(pool)
+
+	// Object store：MVP 用 dev fake；F07 替换为 AWS S3。
+	objStore := objectstore.NewFakeStore()
+
+	learningSvc := learning.NewService(pool, objStore)
+
 	router := httpkit.NewRouter(logger, cfg.WebOrigin)
 	v1 := router.Engine.Group("/api/v1")
 
@@ -112,7 +128,10 @@ func main() {
 	authH := handlers.NewAuthHandler(cfg, pool, verifier, sessionStore, auditWriter, logger)
 	walletH := handlers.NewWalletHandler(cfg, pool, walletSvc, auditWriter, logger)
 	meH := handlers.NewMeHandler(pool, auditWriter, logger, authH)
-	courseH := handlers.NewCourseHandler(course.NewRepo(pool))
+	courseH := handlers.NewCourseHandler(courseRepo, catalogSvc, auditWriter)
+	mediaH := handlers.NewMediaHandler(mediaRepo, objStore, auditWriter, logger)
+	learningH := handlers.NewLearningHandler(learningSvc, auditWriter, logger)
+	commentH := handlers.NewCommentHandler(commentRepo, auditWriter, logger)
 
 	authGroup := v1.Group("/auth")
 	{
@@ -133,6 +152,13 @@ func main() {
 	{
 		catalogGroup.GET("", httpkit.Wrap(courseH.List))
 		catalogGroup.GET("/:id", httpkit.Wrap(courseH.Get))
+		catalogGroup.GET("/:id/comments", httpkit.Wrap(commentH.GetCourseComments))
+	}
+	coursesAuthGroup := v1.Group("/courses")
+	coursesAuthGroup.Use(auth.Middleware(verifier, sessionStore, pool))
+	{
+		coursesAuthGroup.POST("/:id/comments", httpkit.Wrap(commentH.PostCreate))
+		coursesAuthGroup.DELETE("/comments/:id", httpkit.Wrap(commentH.DeleteMine))
 	}
 	teacherGroup := v1.Group("/teacher")
 	teacherGroup.Use(auth.Middleware(verifier, sessionStore, pool))
@@ -141,6 +167,10 @@ func main() {
 		teacherGroup.PUT("/courses/:id", rbacEngine.Middleware(user.PermCourseEdit), httpkit.Wrap(courseH.Update))
 		teacherGroup.PUT("/courses/:id/curriculum", rbacEngine.Middleware(user.PermCourseEdit), httpkit.Wrap(courseH.ReplaceCurriculum))
 		teacherGroup.POST("/courses/:id/submit", rbacEngine.Middleware(user.PermCourseEdit), httpkit.Wrap(courseH.Submit))
+		teacherGroup.POST("/media/upload-intent", httpkit.Wrap(mediaH.PostUploadIntent))
+		teacherGroup.POST("/media/:id/finalize", httpkit.Wrap(mediaH.PostFinalize))
+		teacherGroup.GET("/media", httpkit.Wrap(mediaH.GetMine))
+		teacherGroup.GET("/lessons/:id/preview", httpkit.Wrap(learningH.GetPreview))
 	}
 	courseAdminGroup := v1.Group("/admin/courses")
 	courseAdminGroup.Use(auth.Middleware(verifier, sessionStore, pool), rbacEngine.Middleware(user.PermCourseApprove))
@@ -148,10 +178,27 @@ func main() {
 		courseAdminGroup.POST("/:id/review", httpkit.Wrap(courseH.Review))
 		courseAdminGroup.POST("/:id/archive", httpkit.Wrap(courseH.Archive))
 	}
+	commentsAdminGroup := v1.Group("/admin/comments")
+	commentsAdminGroup.Use(auth.Middleware(verifier, sessionStore, pool), rbacEngine.Middleware(user.PermCommentModerate))
+	{
+		commentsAdminGroup.PATCH("/:id", httpkit.Wrap(commentH.PatchModerate))
+	}
+	learningGroup := v1.Group("/lessons")
+	learningGroup.Use(auth.Middleware(verifier, sessionStore, pool))
+	{
+		learningGroup.GET("/:id/playback", httpkit.Wrap(learningH.GetPlayback))
+	}
 
 	adminGroup := v1.Group("/admin")
 	adminGroup.Use(auth.Middleware(verifier, sessionStore, pool), rbacEngine.Middleware(user.PermSystemAdmin))
 	adminGroup.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
+
+	// 缓存失效订阅
+	go func() {
+		if err := catalogSvc.SubscribeInvalidate(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Warn("catalog_invalidate_subscriber_exit", zap.Error(err))
+		}
+	}()
 
 	logger.Info("api_starting",
 		zap.String("env", cfg.Env),
@@ -162,6 +209,8 @@ func main() {
 		zap.String("cwd", dotenv.CWD),
 		zap.String("database", maskURL(cfg.DatabaseURL)),
 		zap.String("redis", maskURL(cfg.RedisURL)),
+		zap.String("object_store_region", objStore.Region()),
+		zap.String("object_store_bucket", objStore.Bucket()),
 	)
 	if !dotenv.Loaded {
 		logger.Warn("dotenv_not_loaded",

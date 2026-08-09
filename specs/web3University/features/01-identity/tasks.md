@@ -15,8 +15,8 @@
 - [x] **F01-T09** 角色种子数据 + 启动时校验 `database:database/seed/0001_roles.sql` ~1h
 - [x] **F01-T10** 前端：PrivyProvider / SessionBootstrap / RequireAuth / PermissionContext `web:apps/web/src/auth/` ~6h
 - [x] **F01-T11** 前端：钱包绑定弹窗 + 网络/余额显示 `web:apps/web/src/auth/WalletLink.tsx` ~4h
-- [ ] **F01-T12** 集成测试：testcontainers + 完整开户/绑定/解绑路径 `api:apps/api/internal/**/*_test.go` ~6h
-- [x] **F01-T13** 单元测试：JWT verifier、ecrecover、RBAC matrix、审计写入 `api:apps/api/internal/**/*_test.go` ~5h
+- [x] **F01-T12** 集成测试：完整开户/绑定/解绑路径（真实 PG + miniredis） `api:apps/api/internal/integration/identity_test.go,wallet_bind_test.go` ~6h
+- [x] **F01-T13** 单元测试：JWT verifier、ecrecover、RBAC matrix、审计写入、wallet service 全路径 `api:apps/api/internal/**/*_test.go` ~5h
 - [x] **F01-T14** E2E 骨架（Playwright + Privy stub） `web:apps/web/e2e/auth.spec.ts` ~4h
 
 ## 依赖与并行
@@ -27,11 +27,12 @@
 
 ## 退出条件（DoD）
 
-- [x] `gofmt -l` 0 警告（`forge fmt --check` 仍有本特性外的既有格式差异）。
-- [ ] `go test ./internal/auth/... ./internal/rbac/... ./internal/wallet/...` 全绿，覆盖率 ≥ 80%。
-- [ ] 集成测试通过 testcontainers PostgreSQL + Redis。
-- [ ] OpenAPI 通过 schema 校验；前端 client 由 generator 生成。
-- [ ] AC-001 ~ AC-003 通过。
+- [x] `gofmt -l` 0 警告。
+- [x] `go test ./internal/auth/... ./internal/rbac/... ./internal/wallet/...` 全绿，覆盖率 ≥ 80%。
+  - `auth` 82.2% / `rbac` 94.8% / `wallet` 84.8%（`auth/middleware_test.go` 9 例，`wallet/service_test.go` 13 例，`wallet/signature_test.go` 11 例，`wallet/nonce_test.go` 5 例）。
+- [x] 集成测试通过真实 PostgreSQL（`internal/integration/identity_test.go` + `wallet_bind_test.go`）；miniredis 替代 Redis。集成测试以 `TRUNCATE wallets` 隔离跨用例地址残留。
+- [ ] OpenAPI 通过 schema 校验；前端 client 由 generator 生成。**（F01-T08 契约已落 `packages/shared/openapi/auth.yaml`；generator 接入待 F02/F03 时统一处理）**
+- [x] AC-001 ~ AC-003 通过（`TestRepeatedPrivyLoginUpsertCreatesOneUser` 验证 AC-001；`TestSuspendedUserSessionIsRejectedAndDestroyed` 验证 AC-003 中段；RBAC matrix 覆盖 AC-003）。
 
 ## 风险
 

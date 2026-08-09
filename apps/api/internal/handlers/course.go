@@ -10,15 +10,27 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/x-web3/api/internal/audit"
+	"github.com/x-web3/api/internal/catalog"
 	"github.com/x-web3/api/internal/course"
 	"github.com/x-web3/api/internal/errcode"
 	"github.com/x-web3/api/internal/httpkit"
 	"github.com/x-web3/api/internal/review"
 )
 
-type CourseHandler struct{ repo *course.Repo }
+// CourseHandler 课程 CRUD + 状态机 + 公开列表/详情。
+//
+// 公开读路径走 catalog.Service（带 Redis 缓存）；写路径直接调 course.Repo，
+// 写完调 catalog.Invalidate 让所有实例清缓存。
+type CourseHandler struct {
+	repo    *course.Repo
+	catalog *catalog.Service
+	auditor *audit.Writer
+}
 
-func NewCourseHandler(repo *course.Repo) *CourseHandler { return &CourseHandler{repo: repo} }
+func NewCourseHandler(repo *course.Repo, cat *catalog.Service, auditor *audit.Writer) *CourseHandler {
+	return &CourseHandler{repo: repo, catalog: cat, auditor: auditor}
+}
 
 type courseWriteRequest struct {
 	Slug        string `json:"slug"`
@@ -170,28 +182,41 @@ func (h *CourseHandler) transition(c *httpkit.Context, action review.Action, adm
 		mapCourseError(c, err)
 		return
 	}
+	// 写完成后清缓存 + 广播；本地测试用 InvalidateLocal，主进程用 Invalidate。
+	if h.catalog != nil {
+		_ = h.catalog.Invalidate(c.Request.Context())
+	}
 	c.JSON(http.StatusOK, updated)
 }
 
+// Get 公开详情；登录用户若已购买则 enrolled=true（catalog.DetailView 实现）。
+//
+// 未登录 / 不存在 → 404；已购买字段在响应根加 enrolled 标记。
 func (h *CourseHandler) Get(c *httpkit.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		httpkit.Error(c, http.StatusBadRequest, errcode.BadRequest, "invalid course id", nil)
 		return
 	}
-	result, err := h.repo.GetPublished(c.Request.Context(), id)
+	var viewer *uuid.UUID
+	if raw := c.UserID(); raw != "" {
+		if v, err := uuid.Parse(raw); err == nil {
+			viewer = &v
+		}
+	}
+	courseObj, chapters, enrolled, err := h.catalog.DetailView(c.Request.Context(), id, viewer)
 	if err != nil {
 		mapCourseError(c, err)
 		return
 	}
-	chapters, err := h.repo.Curriculum(c.Request.Context(), id, true)
-	if err != nil {
-		httpkit.Internal(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"course": result, "chapters": chapters})
+	c.JSON(http.StatusOK, gin.H{
+		"course":    courseObj,
+		"chapters":  chapters,
+		"enrolled":  enrolled,
+	})
 }
 
+// List 公开列表 + 筛选 + cursor + 缓存。
 func (h *CourseHandler) List(c *httpkit.Context) {
 	f := course.ListFilter{Query: c.Query("q"), Limit: 20}
 	if raw := c.Query("limit"); raw != "" {
@@ -241,7 +266,7 @@ func (h *CourseHandler) List(c *httpkit.Context) {
 		f.BeforeAt = &at
 		f.BeforeID = &id
 	}
-	items, err := h.repo.ListPublished(c.Request.Context(), f)
+	items, err := h.catalog.CachedList(c.Request.Context(), f)
 	if err != nil {
 		httpkit.Internal(c, err)
 		return
