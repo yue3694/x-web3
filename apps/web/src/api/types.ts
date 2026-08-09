@@ -79,3 +79,66 @@ export const authApi = {
         await apiClient.delete<void>(`/me/wallets/${walletId}`);
     },
 };
+
+export type CourseStatus = "draft" | "pending_review" | "published" | "archived";
+
+export interface Course {
+    id: string;
+    teacherId: string;
+    teacherName?: string;
+    slug: string;
+    title: string;
+    description: string;
+    status: CourseStatus;
+    currentVersion: number;
+    priceMinor: number;
+    currency: string;
+    publishedAt?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CoursePage {
+    items: Course[];
+    nextCursor: string;
+}
+
+export interface CourseDetail {
+    course: Course;
+    chapters: Array<{id: string; position: number; title: string; lessons: Array<{id: string; position: number; title: string; required: boolean; durationSeconds: number}>}>;
+}
+
+export interface CourseWriteRequest {
+    slug?: string;
+    title: string;
+    description: string;
+    priceMinor: number;
+    currency: string;
+}
+
+export function buildCourseQuery(input: {q?: string; priceMax?: number; before?: string; limit?: number}): string {
+    const query = new URLSearchParams();
+    if (input.q?.trim()) query.set("q", input.q.trim());
+    if (input.priceMax !== undefined) query.set("priceMax", String(input.priceMax));
+    if (input.before) query.set("before", input.before);
+    query.set("limit", String(input.limit ?? 9));
+    return query.toString();
+}
+
+export const courseApi = {
+    list(input: {q?: string; priceMax?: number; before?: string; limit?: number} = {}): Promise<CoursePage> {
+        return apiClient.get<CoursePage>(`/courses?${buildCourseQuery(input)}`);
+    },
+    get(id: string): Promise<CourseDetail> {
+        return apiClient.get<CourseDetail>(`/courses/${id}`);
+    },
+    create(input: CourseWriteRequest & {slug: string}): Promise<Course> {
+        return apiClient.post<Course>("/teacher/courses", input);
+    },
+    update(id: string, version: number, input: CourseWriteRequest): Promise<Course> {
+        return apiClient.put<Course>(`/teacher/courses/${id}`, input, {headers: {"If-Match": String(version)}});
+    },
+    submit(id: string): Promise<Course> {
+        return apiClient.post<Course>(`/teacher/courses/${id}/submit`);
+    },
+};

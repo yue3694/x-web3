@@ -1,0 +1,169 @@
+openapi: 3.1.0
+info:
+  title: x-web3 API — Courses
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080/api/v1
+paths:
+  /courses:
+    get:
+      summary: Published course catalog
+      parameters:
+        - { in: query, name: q, schema: { type: string } }
+        - { in: query, name: teacherId, schema: { type: string, format: uuid } }
+        - { in: query, name: priceMin, schema: { type: integer, minimum: 0 } }
+        - { in: query, name: priceMax, schema: { type: integer, minimum: 0 } }
+        - { in: query, name: before, description: 'publishedAt,id cursor', schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        '200':
+          description: Catalog page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Course' } }
+                  nextCursor: { type: string }
+  /courses/{id}:
+    get:
+      summary: Published course detail
+      parameters: [ { $ref: '#/components/parameters/CourseId' } ]
+      responses:
+        '200': { description: Course detail, content: { application/json: { schema: { $ref: '#/components/schemas/CourseDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /teacher/courses:
+    post:
+      summary: Create course draft
+      security: [ { sessionCookie: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CourseWrite' } } } }
+      responses:
+        '201': { description: Draft created, content: { application/json: { schema: { $ref: '#/components/schemas/Course' } } } }
+  /teacher/courses/{id}:
+    put:
+      summary: Update owned draft with optimistic locking
+      security: [ { sessionCookie: [] } ]
+      parameters:
+        - { $ref: '#/components/parameters/CourseId' }
+        - { in: header, name: If-Match, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CourseWrite' } } } }
+      responses:
+        '200': { description: Draft updated, content: { application/json: { schema: { $ref: '#/components/schemas/Course' } } } }
+        '409': { description: Stale version or course state conflict }
+  /teacher/courses/{id}/submit:
+    post:
+      summary: Submit owned draft for review
+      security: [ { sessionCookie: [] } ]
+      parameters: [ { $ref: '#/components/parameters/CourseId' } ]
+      responses:
+        '200': { description: Pending review }
+        '409': { description: Invalid state transition }
+  /teacher/courses/{id}/curriculum:
+    put:
+      summary: Atomically replace ordered chapters and lessons
+      security: [ { sessionCookie: [] } ]
+      parameters:
+        - { $ref: '#/components/parameters/CourseId' }
+        - { in: header, name: If-Match, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chapters]
+              properties:
+                chapters: { type: array, items: { $ref: '#/components/schemas/ChapterWrite' } }
+      responses:
+        '200': { description: Curriculum replaced and course version incremented }
+        '409': { description: Stale version or course state conflict }
+  /admin/courses/{id}/review:
+    post:
+      summary: Approve or reject a pending course
+      security: [ { sessionCookie: [] } ]
+      parameters: [ { $ref: '#/components/parameters/CourseId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [approve, reject] }
+                reason: { type: string }
+      responses:
+        '200': { description: Review completed }
+        '409': { description: Invalid state transition or missing rejection reason }
+  /admin/courses/{id}/archive:
+    post:
+      summary: Archive a published course
+      security: [ { sessionCookie: [] } ]
+      parameters: [ { $ref: '#/components/parameters/CourseId' } ]
+      responses:
+        '200': { description: Course archived }
+        '409': { description: Invalid state transition }
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: sid }
+  parameters:
+    CourseId: { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+  responses:
+    NotFound: { description: Course not found }
+  schemas:
+    CourseWrite:
+      type: object
+      required: [title, priceMinor]
+      properties:
+        slug: { type: string, minLength: 1, maxLength: 120 }
+        title: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string }
+        priceMinor: { type: integer, minimum: 0 }
+        currency: { type: string, minLength: 3, maxLength: 3, default: USD }
+    Course:
+      type: object
+      required: [id, teacherId, slug, title, description, status, currentVersion, priceMinor, currency, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        teacherId: { type: string, format: uuid }
+        teacherName: { type: string }
+        slug: { type: string }
+        title: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [draft, pending_review, published, archived] }
+        currentVersion: { type: integer, minimum: 1 }
+        priceMinor: { type: integer, minimum: 0 }
+        currency: { type: string }
+        publishedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CourseDetail:
+      type: object
+      required: [course, chapters]
+      properties:
+        course: { $ref: '#/components/schemas/Course' }
+        chapters: { type: array, items: { $ref: '#/components/schemas/Chapter' } }
+    ChapterWrite:
+      type: object
+      required: [title, lessons]
+      properties:
+        title: { type: string, minLength: 1 }
+        lessons:
+          type: array
+          items:
+            type: object
+            required: [title, required, durationSeconds]
+            properties:
+              title: { type: string, minLength: 1 }
+              required: { type: boolean }
+              durationSeconds: { type: integer, minimum: 0 }
+              mediaAssetId: { type: string, format: uuid }
+    Chapter:
+      allOf:
+        - { $ref: '#/components/schemas/ChapterWrite' }
+        - type: object
+          required: [id, position]
+          properties:
+            id: { type: string, format: uuid }
+            position: { type: integer, minimum: 0 }

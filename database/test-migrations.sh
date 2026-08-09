@@ -26,7 +26,8 @@ fi
 psql "${test_url}" -v ON_ERROR_STOP=1 -f "${repo_root}/database/seed/0001_roles.sql" >/dev/null
 
 version="$("${repo_root}/database/migrate.sh" --database "${test_url}" version 2>&1)"
-if [[ "${version}" != "1" ]]; then
+expected_version="$(find "${repo_root}/database/migrations" -name '*.up.sql' -exec basename {} \; | sed 's/_.*//' | sort -n | tail -1 | sed 's/^0*//')"
+if [[ "${version}" != "${expected_version}" ]]; then
   echo "unexpected migration version: ${version}" >&2
   exit 1
 fi

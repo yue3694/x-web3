@@ -32,6 +32,7 @@ import (
 	"github.com/x-web3/api/internal/audit"
 	"github.com/x-web3/api/internal/auth"
 	"github.com/x-web3/api/internal/config"
+	"github.com/x-web3/api/internal/course"
 	"github.com/x-web3/api/internal/handlers"
 	"github.com/x-web3/api/internal/httpkit"
 	"github.com/x-web3/api/internal/rbac"
@@ -111,6 +112,7 @@ func main() {
 	authH := handlers.NewAuthHandler(cfg, pool, verifier, sessionStore, auditWriter, logger)
 	walletH := handlers.NewWalletHandler(cfg, pool, walletSvc, auditWriter, logger)
 	meH := handlers.NewMeHandler(pool, auditWriter, logger, authH)
+	courseH := handlers.NewCourseHandler(course.NewRepo(pool))
 
 	authGroup := v1.Group("/auth")
 	{
@@ -125,6 +127,25 @@ func main() {
 		meGroup.POST("/wallets/nonce", walletLimit, httpkit.Wrap(walletH.IssueNonce))
 		meGroup.POST("/wallets/link", walletLimit, httpkit.Wrap(walletH.Link))
 		meGroup.DELETE("/wallets/:walletId", walletLimit, httpkit.Wrap(walletH.Unbind))
+	}
+	catalogGroup := v1.Group("/courses")
+	{
+		catalogGroup.GET("", httpkit.Wrap(courseH.List))
+		catalogGroup.GET("/:id", httpkit.Wrap(courseH.Get))
+	}
+	teacherGroup := v1.Group("/teacher")
+	teacherGroup.Use(auth.Middleware(verifier, sessionStore, pool))
+	{
+		teacherGroup.POST("/courses", rbacEngine.Middleware(user.PermCourseCreate), httpkit.Wrap(courseH.Create))
+		teacherGroup.PUT("/courses/:id", rbacEngine.Middleware(user.PermCourseEdit), httpkit.Wrap(courseH.Update))
+		teacherGroup.PUT("/courses/:id/curriculum", rbacEngine.Middleware(user.PermCourseEdit), httpkit.Wrap(courseH.ReplaceCurriculum))
+		teacherGroup.POST("/courses/:id/submit", rbacEngine.Middleware(user.PermCourseEdit), httpkit.Wrap(courseH.Submit))
+	}
+	courseAdminGroup := v1.Group("/admin/courses")
+	courseAdminGroup.Use(auth.Middleware(verifier, sessionStore, pool), rbacEngine.Middleware(user.PermCourseApprove))
+	{
+		courseAdminGroup.POST("/:id/review", httpkit.Wrap(courseH.Review))
+		courseAdminGroup.POST("/:id/archive", httpkit.Wrap(courseH.Archive))
 	}
 
 	adminGroup := v1.Group("/admin")

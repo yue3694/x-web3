@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,8 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/x-web3/api/internal/auth"
+	"github.com/x-web3/api/internal/course"
+	"github.com/x-web3/api/internal/review"
 	"github.com/x-web3/api/internal/user"
 )
 
@@ -32,6 +35,52 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("database ping: %v", err)
 	}
 	return pool
+}
+
+func TestCourseLifecycleOptimisticLockAndCatalog(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	var teacherID, adminID uuid.UUID
+	if err := pool.QueryRow(ctx, `INSERT INTO users(privy_user_id,display_name) VALUES($1,'Teacher') RETURNING id`, "did:privy:teacher-"+uuid.NewString()).Scan(&teacherID); err != nil {
+		t.Fatalf("insert teacher: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO users(privy_user_id,display_name) VALUES($1,'Admin') RETURNING id`, "did:privy:admin-"+uuid.NewString()).Scan(&adminID); err != nil {
+		t.Fatalf("insert admin: %v", err)
+	}
+	repo := course.NewRepo(pool)
+	created, err := repo.Create(ctx, course.CreateInput{TeacherID: teacherID, Slug: "integration-" + uuid.NewString(), Title: "Course draft", Description: "v1", PriceMinor: 1200, Currency: "usd"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	updated, err := repo.UpdateDraft(ctx, course.UpdateInput{ID: created.ID, ActorID: teacherID, Version: 1, Title: "Course updated", Description: "v2", PriceMinor: 1500, Currency: "USD"})
+	if err != nil || updated.CurrentVersion != 2 {
+		t.Fatalf("update: course=%v err=%v", updated, err)
+	}
+	if _, err := repo.UpdateDraft(ctx, course.UpdateInput{ID: created.ID, ActorID: teacherID, Version: 1, Title: "stale", Currency: "USD"}); !errors.Is(err, course.ErrStaleVersion) {
+		t.Fatalf("stale update error = %v", err)
+	}
+	nextVersion, err := repo.ReplaceCurriculum(ctx, created.ID, teacherID, 2, []course.ChapterInput{{Title: "Foundations", Lessons: []course.LessonInput{{Title: "Wallet safety", Required: true, DurationSeconds: 420}, {Title: "Threat models", Required: true, DurationSeconds: 600}}}})
+	if err != nil || nextVersion != 3 {
+		t.Fatalf("replace curriculum: version=%d err=%v", nextVersion, err)
+	}
+	chapters, err := repo.Curriculum(ctx, created.ID, false)
+	if err != nil || len(chapters) != 1 || len(chapters[0].Lessons) != 2 || chapters[0].Lessons[1].Position != 1 {
+		t.Fatalf("curriculum ordering: chapters=%v err=%v", chapters, err)
+	}
+	if _, err := repo.Transition(ctx, created.ID, teacherID, review.Submit, false, ""); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if _, err := repo.Transition(ctx, created.ID, adminID, review.Approve, true, ""); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	got, err := repo.GetPublished(ctx, created.ID)
+	if err != nil || got.Status != review.Published || got.Description != "v2" {
+		t.Fatalf("get published: course=%v err=%v", got, err)
+	}
+	items, err := repo.ListPublished(ctx, course.ListFilter{Query: "updated", Limit: 10})
+	if err != nil || len(items) == 0 {
+		t.Fatalf("list published: count=%d err=%v", len(items), err)
+	}
 }
 
 func TestRepeatedPrivyLoginUpsertCreatesOneUser(t *testing.T) {

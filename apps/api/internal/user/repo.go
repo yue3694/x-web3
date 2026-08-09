@@ -35,6 +35,7 @@ const (
 	PermChainSyncReplay  = "CHAIN_SYNC_REPLAY"
 	PermCertificateRetry = "CERTIFICATE_RETRY"
 	PermCommentModerate  = "COMMENT_MODERATE"
+	PermMediaUpload      = "MEDIA_UPLOAD"
 	PermRoleManage       = "ROLE_MANAGE"
 )
 

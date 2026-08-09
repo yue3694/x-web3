@@ -1,60 +1,49 @@
-import {ConnectButton} from "./components/ConnectButton";
-import {Notepad} from "./components/Notepad";
-import {AccountMenu} from "./features/account/AccountMenu";
-import {SignInButton} from "./auth/SignInButton";
-import {RequireAuth} from "./auth/RequireAuth";
+import {TopNav} from "./components/TopNav";
+import {Hero} from "./components/Hero";
+import {Footer} from "./components/Footer";
+import {CourseCatalog} from "./features/catalog/CourseCatalog";
+import {CourseEditor} from "./features/teacher/CourseEditor";
 import {RequirePermission} from "./auth/RequirePermission";
-import {useSession} from "./auth/SessionContext";
 
+/**
+ * 主页布局：
+ *   TopNav (sticky)
+ *     ↓
+ *   Hero — 品牌主视觉 + 统计
+ *     ↓
+ *   Catalog — 公开课程
+ *     ↓
+ *   Teacher Studio — 需 COURSE_CREATE
+ *     ↓
+ *   Admin — 需 SYSTEM_ADMIN
+ *     ↓
+ *   Footer — 多列导航 + 状态条
+ *
+ * 历史 wallet/account 信息现在统一在 TopNav + UserMenu 下拉里展示，
+ * 不再在主区域里重复（修复 AccountMenu 内容重复问题）。
+ * Notepad 已移除 — 该功能迁出主页，未来作为独立 feature。
+ */
 export function App() {
-    const {profile, hasRole} = useSession();
-
     return (
-        <main className="container">
-            <header className="header">
-                <h1>
-                    x-web3{" "}
-                    <span className="glitch">// WEB3 UNIVERSITY</span>
-                </h1>
-                <p>
-                    <span className="blink">█</span> Sepolia testnet · Vite +
-                    React + wagmi v2 · ConnectKit
-                </p>
-                <ConnectButton />
-                {!profile ? <SignInButton /> : null}
-            </header>
+        <>
+            <TopNav />
 
-            <RequireAuth
-                fallback={
-                    <section className="panel">
-                        <p>Sign in to access the dashboard.</p>
-                    </section>
-                }
-            >
-                <section className="panel">
-                    <AccountMenu />
-                </section>
-            </RequireAuth>
+            <main className="container">
+                <Hero />
 
-            {/* 隐藏超管入口 — 公开导航中不出现。
-                URL 仍可直达 /admin/*，但 API 会 401/403。
-                F02/F06 接入后这里换成 admin 路由 + 鉴权。 */}
-            <RequirePermission code="SYSTEM_ADMIN">
-                <section className="panel admin-slot" hidden={!hasRole("super_admin")}>
-                    <Notepad />
-                </section>
-            </RequirePermission>
+                <CourseCatalog />
 
-            <footer className="footer">
-                <span>// system_status: online</span>
-                <a
-                    href="https://sepolia.etherscan.io/"
-                    target="_blank"
-                    rel="noreferrer"
-                >
-                    sepolia.etherscan.io ↗
-                </a>
-            </footer>
-        </main>
+                <RequirePermission code="COURSE_CREATE">
+                    <div id="studio" />
+                    <CourseEditor />
+                </RequirePermission>
+
+                <RequirePermission code="SYSTEM_ADMIN">
+                    <div id="admin" className="admin-anchor" />
+                </RequirePermission>
+            </main>
+
+            <Footer />
+        </>
     );
 }
