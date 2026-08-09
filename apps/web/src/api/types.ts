@@ -80,6 +80,56 @@ export const authApi = {
     },
 };
 
+/**
+ * F02 切片的播放凭证：
+ *   - issuePlayback → GET /lessons/{id}/playback
+ *     返回 S3 presigned GET（或 CloudFront signed cookie），
+ *     TTL ≤ 5 分钟，过期需重新签发。
+ *   - reportProgress → POST /lessons/{id}/progress
+ *     T13 阶段后端 F04 尚未完成，这里走"软占位"：先发到 /lessons/{id}/progress，
+ *     收到 404/405 时静默退化为本地缓存，避免打断播放。
+ *     真实幂等写与最大进度单调推进留待 F04。
+ */
+export interface PlaybackCredential {
+    lessonId: string;
+    url: string;
+    expiresAt: string;
+    purpose: "playback" | "preview";
+}
+
+export interface ProgressReport {
+    /** 当前播放位置（秒，浮点） */
+    positionSeconds: number;
+    /** 总时长（秒，浮点；不可知时传 0） */
+    durationSeconds: number;
+    /** 进度万分位 0..10000（与 F04 design.md 对齐） */
+    progressBps: number;
+    /** 客户端记录时间（ISO 8601），用于服务端做时钟漂移校正 */
+    reportedAt: string;
+}
+
+export const learningApi = {
+    async issuePlayback(lessonId: string): Promise<PlaybackCredential> {
+        return apiClient.get<PlaybackCredential>(`/lessons/${lessonId}/playback`);
+    },
+    /**
+     * 进度上报占位：当前阶段后端未实现，按 F04 设计的路径发送。
+     * 失败统一吞掉，不影响视频播放。
+     */
+    async reportProgress(lessonId: string, report: ProgressReport): Promise<void> {
+        try {
+            await apiClient.post<void>(`/lessons/${lessonId}/progress`, report);
+        } catch (e: unknown) {
+            if (e instanceof Error && "status" in e) {
+                const status = (e as {status: number}).status;
+                // 404/405 = 后端尚未实现（F04 阶段），静默忽略。
+                if (status === 404 || status === 405 || status === 501) return;
+            }
+            // 其它错误（网络/5xx）也吞掉，避免打断播放体验。
+        }
+    },
+};
+
 export type CourseStatus = "draft" | "pending_review" | "published" | "archived";
 
 export interface Course {
@@ -140,5 +190,57 @@ export const courseApi = {
     },
     submit(id: string): Promise<Course> {
         return apiClient.post<Course>(`/teacher/courses/${id}/submit`);
+    },
+};
+
+/**
+ * 评论 (F02-T09) — 对应 packages/shared/openapi/course.yaml 中 /courses/{id}/comments
+ * 与 /courses/comments/{id}。
+ *
+ * 业务规则（见 apps/api/internal/comment/comment.go）：
+ *   - 只有已购买用户可写评论；后端在 COMMENT_NOT_PURCHASED 时返回 403。
+ *   - moderation_status ∈ pending | approved | rejected；默认 pending。
+ *   - 自己写的评论无论状态都返回给别人看，自己全部状态可见。
+ *   - 软删除 deleted_at 非空 → 列表查询过滤；用户自己 DELETE 走 /courses/comments/{id}。
+ */
+export type ModerationStatus = "pending" | "approved" | "rejected";
+
+export interface Comment {
+    id: string;
+    courseId: string;
+    userId: string;
+    userDisplayName?: string;
+    body: string;
+    moderationStatus: ModerationStatus;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CommentPage {
+    items: Comment[];
+}
+
+export const commentApi = {
+    /** 课程评论列表（未登录也能调；后端自然只返回 approved）。 */
+    listByCourse(courseId: string, limit = 50): Promise<CommentPage> {
+        return apiClient.get<CommentPage>(`/courses/${courseId}/comments?limit=${limit}`);
+    },
+    /** 已购买用户在课程下写评论；moderation 由后端默认成 pending。 */
+    create(courseId: string, body: string): Promise<Comment> {
+        return apiClient.post<Comment>(`/courses/${courseId}/comments`, {body});
+    },
+    /** 软删除自己的评论；后端返回 204。 */
+    softDelete(commentId: string): Promise<void> {
+        return apiClient.delete<void>(`/courses/comments/${commentId}`);
+    },
+    /**
+     * 我的评论列表（含 pending / rejected / approved）。
+     * 对应后端 comment.Repo.ListMyByUser。
+     *
+     * 注意：当前后端 main.go 尚未挂载此路由（与 packages/shared/openapi/course.yaml
+     * 一致地约定为 GET /me/comments）；调用方需在缺失时优雅降级。
+     */
+    listMine(limit = 50): Promise<CommentPage> {
+        return apiClient.get<CommentPage>(`/me/comments?limit=${limit}`);
     },
 };

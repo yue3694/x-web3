@@ -137,9 +137,14 @@ func schemaExists(dsn string) (bool, error) {
 	return strings.TrimSpace(string(out)) == "t", nil
 }
 
-// MigrationFiles 列出要按顺序应用的 migration；按 0001/0002/0003 字典序。
+// MigrationFiles 列出要按顺序应用的 migration；按字典序追加。
 func MigrationFiles() []string {
-	return repoSQLFiles([]string{"0001_identity.up.sql", "0002_course.up.sql", "0003_enrollments.up.sql"})
+	return repoSQLFiles([]string{
+		"0001_identity.up.sql",
+		"0002_course.up.sql",
+		"0003_enrollments.up.sql",
+		"0004_order.up.sql",
+	})
 }
 
 // SeedFiles 列出要按顺序应用的 seed。

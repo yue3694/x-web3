@@ -2,6 +2,8 @@ import {useCallback, useEffect, useState} from "react";
 import {ApiClientError} from "../../api/client";
 import {courseApi, type Course} from "../../api/types";
 
+import {CourseDetail} from "./CourseDetail";
+
 export function formatCoursePrice(course: Pick<Course, "priceMinor" | "currency">): string {
     if (course.priceMinor === 0) return "Free";
     return new Intl.NumberFormat("en-US", {style: "currency", currency: course.currency}).format(course.priceMinor / 100);
@@ -14,6 +16,7 @@ export function CourseCatalog() {
     const [nextCursor, setNextCursor] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [activeId, setActiveId] = useState<string | null>(null);
 
     const load = useCallback(async (before?: string) => {
         setLoading(true);
@@ -50,7 +53,20 @@ export function CourseCatalog() {
             {!loading && !error && items.length === 0 ? <div className="empty-state"><span>◇</span><h3>No published courses yet</h3><p>New courses will appear here after review.</p></div> : null}
             <div className="course-grid">
                 {items.map((course, index) => (
-                    <article className="course-card" key={course.id}>
+                    <article
+                        className="course-card course-card--clickable"
+                        key={course.id}
+                        onClick={() => setActiveId(course.id)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setActiveId(course.id);
+                            }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open course ${course.title}`}
+                    >
                         <div className={`course-card__art course-card__art--${index % 3}`}><span>0{index + 1}</span></div>
                         <div className="course-card__body">
                             <div className="course-card__meta"><span className="status-pill">Published</span><span>{course.teacherName || "University faculty"}</span></div>
@@ -63,6 +79,8 @@ export function CourseCatalog() {
             </div>
             {nextCursor ? <div className="load-more"><button className="btn--ghost" disabled={loading} onClick={() => void load(nextCursor)}>{loading ? "Loading..." : "Load more"}</button></div> : null}
             {loading && items.length === 0 ? <div className="loading-grid" aria-label="Loading courses">{[0,1,2].map((item) => <div className="course-skeleton" key={item} />)}</div> : null}
+
+            <CourseDetail courseId={activeId} onClose={() => setActiveId(null)} />
         </section>
     );
 }

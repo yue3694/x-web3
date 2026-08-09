@@ -41,6 +41,9 @@ type Config struct {
 	LoginRateLimit  int
 	WalletRateLimit int
 
+	// Order
+	PurchaseIntentTTL time.Duration // 创建购买意图的过期时间（默认 15 min）
+
 	// Logging
 	LogLevel string
 }
@@ -70,10 +73,11 @@ func Load() (*Config, error) {
 		SessionTTL:      time.Duration(getEnvInt("SESSION_TTL_HOURS", 168)) * time.Hour,
 		CookieSecure:    getEnvBool("SESSION_COOKIE_SECURE", false),
 		APIDomain:       getEnv("API_DOMAIN", "localhost:8080"),
-		WalletNonceTTL:  time.Duration(getEnvInt("WALLET_NONCE_TTL_SECONDS", 300)) * time.Second,
-		LoginRateLimit:  getEnvInt("LOGIN_RATE_LIMIT_PER_MINUTE", 10),
-		WalletRateLimit: getEnvInt("WALLET_RATE_LIMIT_PER_MINUTE", 5),
-		LogLevel:        getEnv("LOG_LEVEL", "info"),
+		WalletNonceTTL:    time.Duration(getEnvInt("WALLET_NONCE_TTL_SECONDS", 300)) * time.Second,
+		PurchaseIntentTTL: time.Duration(getEnvInt("PURCHASE_INTENT_TTL_MINUTES", 15)) * time.Minute,
+		LoginRateLimit:    getEnvInt("LOGIN_RATE_LIMIT_PER_MINUTE", 10),
+		WalletRateLimit:   getEnvInt("WALLET_RATE_LIMIT_PER_MINUTE", 5),
+		LogLevel:          getEnv("LOG_LEVEL", "info"),
 	}
 
 	var errs []string

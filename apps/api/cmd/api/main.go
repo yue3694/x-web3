@@ -40,6 +40,7 @@ import (
 	"github.com/x-web3/api/internal/learning"
 	"github.com/x-web3/api/internal/media"
 	"github.com/x-web3/api/internal/objectstore"
+	"github.com/x-web3/api/internal/order"
 	"github.com/x-web3/api/internal/rbac"
 	"github.com/x-web3/api/internal/user"
 	"github.com/x-web3/api/internal/wallet"
@@ -105,6 +106,7 @@ func main() {
 	objStore := objectstore.NewFakeStore()
 
 	learningSvc := learning.NewService(pool, objStore)
+	orderSvc := order.NewService(pool, cfg.PurchaseIntentTTL)
 
 	router := httpkit.NewRouter(logger, cfg.WebOrigin)
 	v1 := router.Engine.Group("/api/v1")
@@ -132,6 +134,7 @@ func main() {
 	mediaH := handlers.NewMediaHandler(mediaRepo, objStore, auditWriter, logger)
 	learningH := handlers.NewLearningHandler(learningSvc, auditWriter, logger)
 	commentH := handlers.NewCommentHandler(commentRepo, auditWriter, logger)
+	orderH := handlers.NewOrderHandler(orderSvc, auditWriter)
 
 	authGroup := v1.Group("/auth")
 	{
@@ -159,6 +162,18 @@ func main() {
 	{
 		coursesAuthGroup.POST("/:id/comments", httpkit.Wrap(commentH.PostCreate))
 		coursesAuthGroup.DELETE("/comments/:id", httpkit.Wrap(commentH.DeleteMine))
+	}
+	orderGroup := v1.Group("/orders")
+	orderGroup.Use(auth.Middleware(verifier, sessionStore, pool))
+	{
+		orderGroup.POST("/purchase-intents", httpkit.Wrap(orderH.PostPurchaseIntent))
+		orderGroup.POST("/:intentId/transactions", httpkit.Wrap(orderH.PostTransaction))
+		orderGroup.GET("/:id", httpkit.Wrap(orderH.GetOrder))
+	}
+	meOrdersGroup := v1.Group("/me")
+	meOrdersGroup.Use(auth.Middleware(verifier, sessionStore, pool))
+	{
+		meOrdersGroup.GET("/orders", httpkit.Wrap(orderH.GetMyOrders))
 	}
 	teacherGroup := v1.Group("/teacher")
 	teacherGroup.Use(auth.Middleware(verifier, sessionStore, pool))

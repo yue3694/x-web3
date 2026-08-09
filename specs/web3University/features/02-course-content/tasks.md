@@ -14,7 +14,7 @@
 - [x] **F02-T10** OpenAPI：course / media / comments `shared:packages/shared/openapi/course.yaml` ~4h
 - [x] **F02-T11** 前端公开列表 + 详情 + 响应式（list 与响应式已完成） `web:apps/web/src/features/catalog/` ~8h
 - [ ] **F02-T12** 前端老师编辑器（章节拖拽与媒体上传 UI 仍待） `web:apps/web/src/features/teacher/` ~12h
-- [ ] **F02-T13** 前端学习播放器外壳（受保护凭证 + 进度上报占位） `web:apps/web/src/features/learning/Player.tsx` ~6h
+- [x] **F02-T13** 前端学习播放器外壳（受保护凭证 + 进度上报占位） `web:apps/web/src/features/learning/Player.tsx` ~6h
 - [ ] **F02-T14** 前端评论区 + 我的评论 `web:apps/web/src/features/catalog/Comments.tsx,account/` ~4h
 - [x] **F02-T15** 集成测试：状态机 + 乐观锁（已有）+ 评论权限矩阵 + catalog enrolled `api:apps/api/internal/integration/{course,comment}_test.go` ~8h
 - [ ] **F02-T16** 组件测试：列表筛选/分页、编辑器保存冲突提示 `web:apps/web/src/**/*.test.tsx` ~6h
