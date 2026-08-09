@@ -20,9 +20,11 @@ const PrivySignInButton = lazy(() => import("./PrivySignInButton"));
 interface SignInButtonProps {
     /** 自定义登录触发器（默认按钮） */
     children?: React.ReactNode;
+    /** 自定义 className（用于在不同容器内复用样式） */
+    className?: string;
 }
 
-export function SignInButton({children}: SignInButtonProps) {
+export function SignInButton({children, className}: SignInButtonProps) {
 	if (!usesPrivyDevStub) {
 		return (
 			<Suspense fallback={<button disabled>Loading sign in…</button>}>
@@ -30,10 +32,12 @@ export function SignInButton({children}: SignInButtonProps) {
 			</Suspense>
 		);
 	}
-	return <DevSignInButton>{children}</DevSignInButton>;
+	return (
+		<DevSignInButton className={className}>{children}</DevSignInButton>
+	);
 }
 
-function DevSignInButton({children}: SignInButtonProps) {
+function DevSignInButton({children, className}: SignInButtonProps) {
     const {login} = useSession();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -54,7 +58,12 @@ function DevSignInButton({children}: SignInButtonProps) {
     };
 
     return (
-        <button type="button" onClick={handle} disabled={busy}>
+        <button
+            type="button"
+            className={className}
+            onClick={handle}
+            disabled={busy}
+        >
             {children ?? (busy ? "Signing in…" : "Sign in")}
             {error ? <span role="alert"> — {error}</span> : null}
         </button>

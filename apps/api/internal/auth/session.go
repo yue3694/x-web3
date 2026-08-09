@@ -69,6 +69,40 @@ func (s *SessionStore) Read(ctx context.Context, sid string) (*SessionData, erro
 	return s.verifyAndDecode(raw)
 }
 
+// Refresh atomically rotates an existing session id and extends its TTL.
+// The old id is revoked before the new id is returned to prevent replay.
+func (s *SessionStore) Refresh(ctx context.Context, sid string, fp string) (string, *SessionData, error) {
+	if sid == "" {
+		return "", nil, errors.New("session: id required")
+	}
+	d, err := s.Read(ctx, sid)
+	if err != nil || d == nil {
+		if err == nil {
+			err = errors.New("session: not found")
+		}
+		return "", nil, err
+	}
+	if fp != "" {
+		d.Fingerprint = fp
+	}
+	newSID, err := NewSessionID()
+	if err != nil {
+		return "", nil, err
+	}
+	now := time.Now().UTC()
+	d.CreatedAt = now
+	d.ExpiresAt = now.Add(s.ttl)
+	if err := s.write(ctx, newSID, d); err != nil {
+		return "", nil, err
+	}
+	if err := s.Destroy(ctx, sid); err != nil {
+		_ = s.Destroy(ctx, newSID)
+		return "", nil, err
+	}
+	return newSID, d, nil
+}
+
+// Destroy revokes a session id. It is idempotent for logout retries.
 func (s *SessionStore) Destroy(ctx context.Context, sid string) error {
 	return s.rdb.Del(ctx, s.key(sid)).Err()
 }

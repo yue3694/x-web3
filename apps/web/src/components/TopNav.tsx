@@ -16,6 +16,7 @@ import {useEffect, useState} from "react";
 
 import {useSession} from "@/auth/SessionContext";
 import {RequirePermission} from "@/auth/RequirePermission";
+import {SignInButton} from "@/auth/SignInButton";
 import {UserMenu} from "@/features/account/UserMenu";
 
 interface NavLink {
@@ -113,7 +114,13 @@ export function TopNav() {
 
                 <div className="nav__cluster">
                     <WalletChip />
-                    {profile ? <UserMenu /> : null}
+                    {profile ? (
+                        <UserMenu />
+                    ) : (
+                        <SignInButton className="btn btn--ghost">
+                            Sign in
+                        </SignInButton>
+                    )}
                 </div>
             </div>
         </header>

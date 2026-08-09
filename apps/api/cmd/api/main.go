@@ -117,6 +117,7 @@ func main() {
 	authGroup := v1.Group("/auth")
 	{
 		authGroup.POST("/privy/session", httpkit.RateLimit(rdb, "login", cfg.LoginRateLimit, httpkit.ClientIPKey), httpkit.Wrap(authH.PostPrivySession))
+		authGroup.POST("/session/refresh", auth.Middleware(verifier, sessionStore, pool), httpkit.Wrap(authH.RefreshSession))
 		authGroup.DELETE("/session", httpkit.Wrap(authH.DeleteSession))
 	}
 	meGroup := v1.Group("/me")

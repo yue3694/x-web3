@@ -18,6 +18,8 @@
     "typecheck": "pnpm -r --parallel run typecheck",
     "lint": "pnpm -r --parallel run lint",
     "test": "pnpm -r --parallel run test",
+    "e2e:web": "pnpm --filter @x-web3/web e2e",
+    "e2e:web:install": "pnpm --filter @x-web3/web e2e:install",
     "deploy:aws": "bash scripts/deploy-aws.sh",
     "contracts:compile": "pnpm --filter @x-web3/contracts compile",
     "contracts:test": "pnpm --filter @x-web3/contracts test",

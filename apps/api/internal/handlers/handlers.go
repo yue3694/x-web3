@@ -113,6 +113,26 @@ func (h *AuthHandler) DeleteSession(c *httpkit.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// RefreshSession 复用当前 cookie 的 sid 重新颁发一个 session，原子轮换 sid。
+// 未登录或 sid 失效 → 401；不存在"匿名刷新"路径。
+func (h *AuthHandler) RefreshSession(c *httpkit.Context) {
+	sid, _ := c.Cookie(auth.CookieName)
+	if sid == "" {
+		httpkit.Error(c, http.StatusUnauthorized, errcode.SessionExpired, "missing session", nil)
+		return
+	}
+	newSID, data, err := h.session.Refresh(c.Request.Context(), sid, fpFromCtx(c))
+	if err != nil || data == nil {
+		httpkit.Error(c, http.StatusUnauthorized, errcode.SessionExpired, "session refresh failed", nil)
+		return
+	}
+	auth.SetSessionCookie(c, newSID, int(h.cfg.SessionTTL.Seconds()), h.cfg.CookieSecure)
+	c.JSON(http.StatusOK, gin.H{
+		"subject":   data.Subject,
+		"expiresAt": data.ExpiresAt.UTC().Format(time.RFC3339),
+	})
+}
+
 // profileOrInternal 返回用户 profile，失败时已写 500。
 func (h *AuthHandler) profileOrInternal(c *httpkit.Context, id uuid.UUID) any {
 	repo := user.NewRepo(h.pool)

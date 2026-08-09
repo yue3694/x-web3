@@ -41,6 +41,7 @@ func Middleware(verifier Verifier, store *SessionStore, pool *pgxpool.Pool) gin.
 		var status string
 		err = pool.QueryRow(c.Request.Context(), q, data.Subject).Scan(&uid, &status)
 		if errors.Is(err, pgx.ErrNoRows) {
+			_ = store.Destroy(c.Request.Context(), sid)
 			respond401(c, "user missing")
 			return
 		}
@@ -58,6 +59,7 @@ func Middleware(verifier Verifier, store *SessionStore, pool *pgxpool.Pool) gin.
 		}
 		c.Set("user_id", uid.String())
 		c.Set("subject", data.Subject)
+		c.Set("sid", sid)
 		c.Next()
 	}
 }

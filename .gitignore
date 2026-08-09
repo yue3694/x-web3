@@ -45,6 +45,12 @@ pnpm-debug.log*
 coverage/
 *.lcov
 
+# ---------- Playwright ----------
+apps/web/playwright-report/
+apps/web/test-results/
+apps/web/blob-report/
+apps/web/playwright/.cache/
+
 # ---------- Node ----------
 node_modules/
 .pnpm-store/

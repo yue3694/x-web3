@@ -125,9 +125,13 @@ func NewVerifier(ctx context.Context, cfg Config, logger *zap.Logger) (Verifier,
 	if err != nil {
 		return nil, fmt.Errorf("auth: jwks load: %w", err)
 	}
+	audience := cfg.Audience
+	if audience == "" {
+		audience = cfg.AppID
+	}
 	return &jwksVerifier{
 		appID:    cfg.AppID,
-		audience: cfg.AppID,
+		audience: audience,
 		jwks:     jwks,
 		logger:   logger,
 	}, nil

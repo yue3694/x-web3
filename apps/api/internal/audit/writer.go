@@ -48,14 +48,42 @@ type Entry struct {
 	CorrelationID string
 }
 
+// Sink 抽象出底层的 SQL 执行；生产由 pgxpool.Pool 提供，
+// 单测可注入 stub 以避免依赖真实 DB。返回值是 pgconn.CommandTag
+// 或其测试替身，因此用 any 暴露。
+type Sink interface {
+	Exec(ctx context.Context, sql string, args ...any) (any, error)
+}
+
+// poolSink 把 *pgxpool.Pool 适配成 Sink。
+type poolSink struct{ pool *pgxpool.Pool }
+
+func (s *poolSink) Exec(ctx context.Context, sql string, args ...any) (any, error) {
+	return s.pool.Exec(ctx, sql, args...)
+}
+
 // Writer append-only writer。
 type Writer struct {
-	pool   *pgxpool.Pool
+	sink   Sink
 	logger *zap.Logger
 }
 
+// NewWriter 构造生产用 Writer；底层 Sink 走 pgxpool。
 func NewWriter(pool *pgxpool.Pool, logger *zap.Logger) *Writer {
-	return &Writer{pool: pool, logger: logger}
+	return NewWriterWithSink(&poolSink{pool: pool}, logger)
+}
+
+// NewWriterWithSink 允许测试注入自定义 Sink（保持生产路径不变）。
+func NewWriterWithSink(sink Sink, logger *zap.Logger) *Writer {
+	return &Writer{sink: sink, logger: logger}
+}
+
+// FillCorrelationID 当 Entry.CorrelationID 为空时生成一个时间戳兜底值。
+// 暴露为独立函数以便单测断言。
+func FillCorrelationID(e *Entry) {
+	if e.CorrelationID == "" {
+		e.CorrelationID = time.Now().UTC().Format(time.RFC3339Nano)
+	}
 }
 
 // Log 写入一条审计。必须在调用方的事务外执行（audit 落库不影响业务事务）。
@@ -64,15 +92,8 @@ func NewWriter(pool *pgxpool.Pool, logger *zap.Logger) *Writer {
 func (w *Writer) Log(ctx context.Context, e Entry) error {
 	beforeB, _ := json.Marshal(e.Before)
 	afterB, _ := json.Marshal(e.After)
-	if e.CorrelationID == "" {
-		// 兜底：调用方未注入；middleware 一般已注入
-		e.CorrelationID = time.Now().UTC().Format(time.RFC3339Nano)
-	}
-	const q = `
-INSERT INTO audit_logs
-  (actor_user_id, action, target_type, target_id, before, after, correlation_id, ip, user_agent)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
-	_, err := w.pool.Exec(ctx, q,
+	FillCorrelationID(&e)
+	_, err := w.sink.Exec(ctx, auditInsertSQL,
 		e.ActorUserID, string(e.Action), e.TargetType, e.TargetID,
 		beforeB, afterB, e.CorrelationID, e.IP, e.UserAgent,
 	)
@@ -89,16 +110,20 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 func (w *Writer) LogTx(ctx context.Context, tx pgx.Tx, e Entry) error {
 	beforeB, _ := json.Marshal(e.Before)
 	afterB, _ := json.Marshal(e.After)
-	if e.CorrelationID == "" {
-		e.CorrelationID = time.Now().UTC().Format(time.RFC3339Nano)
-	}
-	const q = `
-INSERT INTO audit_logs
-  (actor_user_id, action, target_type, target_id, before, after, correlation_id, ip, user_agent)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
-	_, err := tx.Exec(ctx, q,
+	FillCorrelationID(&e)
+	_, err := tx.Exec(ctx, auditInsertSQL,
 		e.ActorUserID, string(e.Action), e.TargetType, e.TargetID,
 		beforeB, afterB, e.CorrelationID, e.IP, e.UserAgent,
 	)
 	return err
 }
+
+// auditInsertSQL 集中维护 INSERT 语句。
+const auditInsertSQL = `
+INSERT INTO audit_logs
+  (actor_user_id, action, target_type, target_id, before, after, correlation_id, ip, user_agent)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+
+// AuditInsertSQLForTest 暴露 INSERT 语句供测试断言；
+// 生产代码请走 Log / LogTx 入口，不要直接 Exec 此 SQL。
+func AuditInsertSQLForTest() string { return auditInsertSQL }

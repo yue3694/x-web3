@@ -16,12 +16,19 @@ import (
 	"github.com/x-web3/api/internal/user"
 )
 
+// Source 抽象出 role/permission 查询；生产由 user.Repo 提供，
+// 单测可注入 stub，避免依赖真实数据库。
+type Source interface {
+	ListPermissions(ctx context.Context, userID uuid.UUID) ([]string, error)
+	ListRoleCodes(ctx context.Context, userID uuid.UUID) ([]string, error)
+}
+
 // Engine 提供：
 //   - PermissionsFor(userID) []string  // 带 TTL 内存缓存
 //   - HasPermission(userID, code) bool
 //   - Require(code) middleware
 type Engine struct {
-	repo   *user.Repo
+	src    Source
 	pool   *pgxpool.Pool
 	logger *zap.Logger
 
@@ -38,14 +45,26 @@ type cacheEntry struct {
 
 const defaultTTL = 60 * time.Second
 
+// NewEngine 构造生产用 Engine；底层 Source 走 user.Repo。
 func NewEngine(pool *pgxpool.Pool, logger *zap.Logger) *Engine {
+	return NewEngineWithSource(user.NewRepo(pool), logger)
+}
+
+// NewEngineWithSource 允许测试注入自定义 Source（保持生产路径不变）。
+func NewEngineWithSource(src Source, logger *zap.Logger) *Engine {
 	return &Engine{
-		pool:   pool,
-		repo:   user.NewRepo(pool),
+		src:    src,
 		logger: logger,
 		ttl:    defaultTTL,
 		c:      make(map[uuid.UUID]cacheEntry),
 	}
+}
+
+// SetTTL 仅测试用：缩短/延长缓存 TTL。
+func (e *Engine) SetTTL(d time.Duration) {
+	e.mu.Lock()
+	e.ttl = d
+	e.mu.Unlock()
 }
 
 // Permissions 返回用户 permission 列表（含缓存）。
@@ -53,11 +72,11 @@ func (e *Engine) Permissions(ctx context.Context, userID uuid.UUID) ([]string, e
 	if e.hit(userID) {
 		return e.c[userID].perms, nil
 	}
-	perms, err := e.repo.ListPermissions(ctx, userID)
+	perms, err := e.src.ListPermissions(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	roles, err := e.repo.ListRoleCodes(ctx, userID)
+	roles, err := e.src.ListRoleCodes(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +96,7 @@ func (e *Engine) Has(ctx context.Context, userID uuid.UUID, code string) (bool, 
 		}
 	}
 	// super_admin 通配：单查一次角色，命中即放行
-	roles, _ := e.repo.ListRoleCodes(ctx, userID)
+	roles, _ := e.src.ListRoleCodes(ctx, userID)
 	for _, r := range roles {
 		if r == user.RoleSuperAdmin {
 			return true, nil
