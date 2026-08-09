@@ -1,0 +1,74 @@
+# x-web3 University — optional dev services.
+#
+# PostgreSQL is expected to run locally (e.g. via `brew services start postgresql@16`
+# or Postgres.app). Only redis + anvil are provided here as Docker services.
+#
+# If you also want Postgres in Docker, uncomment the `postgres` block below.
+
+name: x-web3-dev
+
+services:
+  # Postgres — bring your own (brew / Postgres.app / docker).
+  # Uncomment to run as a container:
+  #
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: x-web3-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: xweb3
+  #     POSTGRES_USER: xweb3
+  #     POSTGRES_PASSWORD: xweb3
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U xweb3 -d xweb3"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: x-web3-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  anvil:
+    # Local EVM chain for contract testing + worker indexer.
+    image: ghcr.io/foundry-rs/foundry:stable
+    container_name: x-web3-anvil
+    restart: unless-stopped
+    command:
+      - "anvil"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8545"
+      - "--block-time"
+      - "3"
+      - "--accounts"
+      - "10"
+      - "--balance"
+      - "10000"
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test: ["CMD", "cast", "block-number", "--rpc-url", "http://127.0.0.1:8545"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  redis_data:
+  # postgres_data:

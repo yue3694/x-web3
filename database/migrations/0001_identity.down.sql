@@ -1,0 +1,16 @@
+-- 0001_identity.down.sql
+BEGIN;
+
+DROP TRIGGER IF EXISTS users_touch_updated_at ON users;
+DROP FUNCTION IF EXISTS touch_updated_at();
+DROP FUNCTION IF EXISTS ensure_audit_partition(timestamptz);
+
+DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS user_roles CASCADE;
+DROP TABLE IF EXISTS role_permissions CASCADE;
+DROP TABLE IF EXISTS permissions CASCADE;
+DROP TABLE IF EXISTS roles CASCADE;
+DROP TABLE IF EXISTS wallets CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+COMMIT;

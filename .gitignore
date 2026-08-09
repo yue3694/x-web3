@@ -49,4 +49,12 @@ coverage/
 node_modules/
 .pnpm-store/
 
+# ---------- Go ----------
+**/*.test
+**/*.out
+apps/api/.env
+apps/api/server
+apps/worker/.env
+apps/worker/worker
+
 .feishu-*

@@ -2,23 +2,36 @@
   "name": "x-web3",
   "version": "0.1.0",
   "private": true,
-  "description": "Web3 monorepo: Vite + React + wagmi frontend, Foundry smart contracts deployed to Sepolia",
+  "description": "Web3 University monorepo: Vite + React + wagmi frontend, Go API/Worker, Foundry smart contracts on Sepolia",
   "packageManager": "pnpm@10.19.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "go": ">=1.24"
   },
   "scripts": {
     "dev": "pnpm --filter @x-web3/web dev",
+    "dev:api": "pnpm api:dev",
+    "dev:worker": "pnpm worker:dev",
+    "dev:stack": "docker compose -f deploy/docker-compose.yml up -d redis anvil && pnpm dev:api",
     "build": "pnpm --filter @x-web3/web build",
     "preview": "pnpm --filter @x-web3/web preview",
-    "deploy:aws": "bash scripts/deploy-aws.sh",
+    "typecheck": "pnpm -r --parallel run typecheck",
     "lint": "pnpm -r --parallel run lint",
+    "test": "pnpm -r --parallel run test",
+    "deploy:aws": "bash scripts/deploy-aws.sh",
     "contracts:compile": "pnpm --filter @x-web3/contracts compile",
     "contracts:test": "pnpm --filter @x-web3/contracts test",
     "contracts:deploy:sepolia": "pnpm --filter @x-web3/contracts deploy:sepolia",
     "contracts:deploy:notepad:sepolia": "pnpm --filter @x-web3/contracts deploy:notepad:sepolia",
     "contracts:verify:sepolia": "pnpm --filter @x-web3/contracts verify:sepolia",
-    "contracts:export:abi": "pnpm --filter @x-web3/contracts export:abi"
+    "contracts:export:abi": "pnpm --filter @x-web3/contracts export:abi",
+    "api:dev": "cd apps/api && go run ./cmd/api",
+    "api:test": "cd apps/api && go test ./...",
+    "api:fmt": "cd apps/api && gofmt -l .",
+    "worker:dev": "cd apps/worker && go run ./cmd/worker",
+    "worker:test": "cd apps/worker && go test ./...",
+    "db:migrate": "cd database && ./migrate.sh up",
+    "db:rollback": "cd database && ./migrate.sh down"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

@@ -1,0 +1,62 @@
+/**
+ * SignInButton — 触发 Privy 登录。
+ *
+ * 注：本仓前端使用 ConnectKit + wagmi 进行钱包交互。
+ * Privy access token 的获取方式（MVP 占位）：
+ *   - 真实环境：通过 @privy-io/react-auth 调 usePrivy().getAccessToken()；
+ *   - 本地 dev（PRIVY_DEV_STUB=1）：前端直接传字符串 "stub" 给后端，
+ *     后端 dev stub 验证器签发固定 subject 的 session。
+ *
+ * 如果要切换到真 Privy SDK，把 loginPrivy 替换成 usePrivy().login() →
+ * useAccessToken() 即可。其它代码（loginWithPrivy 调用）不变。
+ */
+
+import {lazy, Suspense, useState} from "react";
+import {useSession} from "./SessionContext";
+import {usesPrivyDevStub} from "./PrivyRuntime";
+
+const PrivySignInButton = lazy(() => import("./PrivySignInButton"));
+
+interface SignInButtonProps {
+    /** 自定义登录触发器（默认按钮） */
+    children?: React.ReactNode;
+}
+
+export function SignInButton({children}: SignInButtonProps) {
+	if (!usesPrivyDevStub) {
+		return (
+			<Suspense fallback={<button disabled>Loading sign in…</button>}>
+				<PrivySignInButton>{children}</PrivySignInButton>
+			</Suspense>
+		);
+	}
+	return <DevSignInButton>{children}</DevSignInButton>;
+}
+
+function DevSignInButton({children}: SignInButtonProps) {
+    const {login} = useSession();
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const handle = async () => {
+        setBusy(true);
+        setError(null);
+        try {
+            // 真实环境替换为：
+            //   const {getAccessToken} = usePrivy();
+            //   const privyAccessToken = await getAccessToken();
+			await login("stub");
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "login failed");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <button type="button" onClick={handle} disabled={busy}>
+            {children ?? (busy ? "Signing in…" : "Sign in")}
+            {error ? <span role="alert"> — {error}</span> : null}
+        </button>
+    );
+}
