@@ -95,6 +95,14 @@ func (s *Scanner) Metrics() Metrics {
 	}
 }
 
+// Interval 暴露扫描间隔给调用方（如 main.go 复用 ticker 时）。
+func (s *Scanner) Interval() time.Duration {
+	if s.interval <= 0 {
+		return 30 * time.Minute
+	}
+	return s.interval
+}
+
 // Start 阻塞；ctx.Done() 退出。
 func (s *Scanner) Start(ctx context.Context) {
 	ticker := time.NewTicker(s.interval)

@@ -15,6 +15,15 @@
 //	COMMIT
 //
 // 任一步失败整体回滚；调用方重试。
+//
+// 幂等 & reorg 保护：
+//   - confirmed / failed / reorged 状态的 order **不会**被 Apply 推进回中间态：
+//     UPDATE WHERE 子句强制 status IN ('submitted','confirming')，0 行匹配即代表
+//     已经处理过（含 admin rewind 之后 re-deliver 同一事件）；调用方拿到当前
+//     state 后由其决定（绝大多数情况直接丢弃）。
+//   - chain_events 的 unique (chain_id, tx_hash, log_index) 保证事件落库幂等；
+//     同 tx_hash 不同 log_index（multi-log tx）允许重复插入。
+//   - enrollments 的 unique (user_id, course_id) 保证不出现双重选课。
 package workerorder
 
 import (
@@ -51,8 +60,10 @@ func NewConfirmer(pool *pgxpool.Pool) *Confirmer { return &Confirmer{pool: pool}
 // 输入：orderID + 解码后的事件 + 已校验的 intent（用于对账冗余）。
 //
 // 返回值：
-//   - enrollmentID：新插入的 enrollment id；幂等命中时为 uuid.Nil。
-//   - state："confirmed" / "failed" / "reorged" — 写到 orders.status。
+//   - enrollmentID：新插入的 enrollment id；幂等命中时为 uuid.Nil（已存在）。
+//   - state：orders.status 实际值。可能是 "confirmed" / "failed" / "reorged" /
+//     "submitted" / "confirming"。当 order 已经处于终态（confirmed / failed /
+//     reorged）时 Apply 不会回退；调用方应检查 state 再决定是否上报。
 func (c *Confirmer) Apply(ctx context.Context, in ApplyInput) (uuid.UUID, string, error) {
 	tx, err := c.pool.Begin(ctx)
 	if err != nil {
@@ -124,23 +135,48 @@ WHERE pi.id=$1`, intentID).Scan(&dbCourseKey, &dbTokenAddress, &dbAmount, &dbPri
 		PriceVersion: in.Event.PriceVersion,
 	}
 	if err := chain.ValidateReceipt(in.Event, &want); err != nil {
-		// 标记 failed，写 failure_code
-		_, _ = tx.Exec(ctx, `UPDATE orders SET status='failed', failure_code='RECEIPT_MISMATCH', updated_at=now() WHERE id=$1`, orderID)
-		if err := tx.Commit(ctx); err != nil {
-			return uuid.Nil, "failed", err
+		// 标记 failed：仅当 order 还在中间态时才翻；reorged / confirmed 不回退。
+		tag, err := tx.Exec(ctx, `UPDATE orders SET status='failed', failure_code='RECEIPT_MISMATCH', updated_at=now()
+WHERE id=$1 AND status IN ('submitted','confirming')`, orderID)
+		if err != nil {
+			return uuid.Nil, "", err
 		}
-		return uuid.Nil, "failed", nil
+		_ = tag // 即使 0 行匹配也走提交，下面读最新 status 返回
+		// 读最新 status 用于返回
+		var current string
+		if err := tx.QueryRow(ctx, `SELECT status FROM orders WHERE id=$1`, orderID).Scan(&current); err != nil {
+			return uuid.Nil, "", err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return uuid.Nil, current, err
+		}
+		return uuid.Nil, current, nil
 	}
 
 	// 4) confirmed → 写 enrollment + outbox
+	//    关键幂等：WHERE status IN ('submitted','confirming')，
+	//    命中 0 行 → order 已终态（confirmed / failed / reorged），
+	//    不再做 enrollment + outbox 写入（这些副作用不应该重放）。
 	confirmedAt := in.BlockTime
 	if confirmedAt.IsZero() {
 		confirmedAt = time.Now().UTC()
 	}
-	_, err = tx.Exec(ctx, `UPDATE orders SET status='confirmed', tx_hash=$2, block_number=$3, log_index=$4, block_hash=$5, confirmed_at=$6, updated_at=now() WHERE id=$1`,
+	tag, err := tx.Exec(ctx, `UPDATE orders SET status='confirmed', tx_hash=$2, block_number=$3, log_index=$4, block_hash=$5, confirmed_at=$6, updated_at=now()
+WHERE id=$1 AND status IN ('submitted','confirming')`,
 		orderID, in.TxHash, in.BlockNumber, in.LogIndex, in.BlockHash, confirmedAt)
 	if err != nil {
 		return uuid.Nil, "", err
+	}
+	if tag.RowsAffected() == 0 {
+		// 终态回放：返回 order 当前 status，不再写 enrollment / outbox。
+		var current string
+		if err := tx.QueryRow(ctx, `SELECT status FROM orders WHERE id=$1`, orderID).Scan(&current); err != nil {
+			return uuid.Nil, "", err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return uuid.Nil, current, err
+		}
+		return uuid.Nil, current, nil
 	}
 	var enrollmentID uuid.UUID
 	err = tx.QueryRow(ctx, `INSERT INTO enrollments(user_id,course_id,source) VALUES($1,$2,'order')
@@ -150,14 +186,14 @@ RETURNING id`, userID, courseID).Scan(&enrollmentID)
 		return uuid.Nil, "", err
 	}
 	outboxPayload, _ := json.Marshal(map[string]any{
-		"orderId":     orderID.String(),
-		"userId":      userID.String(),
-		"courseId":    courseID.String(),
+		"orderId":      orderID.String(),
+		"userId":       userID.String(),
+		"courseId":     courseID.String(),
 		"enrollmentId": enrollmentID.String(),
-		"amount":      dbAmount,
-		"token":       dbTokenAddress,
-		"chainId":     dbChainID,
-		"market":      dbMarketAddress,
+		"amount":       dbAmount,
+		"token":        dbTokenAddress,
+		"chainId":      dbChainID,
+		"market":       dbMarketAddress,
 	})
 	if _, err := tx.Exec(ctx, `INSERT INTO outbox_events(aggregate,type,payload) VALUES('order','order.confirmed',$1)`, outboxPayload); err != nil {
 		return uuid.Nil, "", err

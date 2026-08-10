@@ -54,17 +54,6 @@ const smallBtnStyle: CSSProperties = {
     fontSize: "0.78rem",
 };
 
-function formatDate(iso: string | null): string {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    if (Number.isNaN(d.valueOf())) return iso;
-    return new Intl.DateTimeFormat("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-    }).format(d);
-}
-
 function roleLabel(code: AdminRoleCode): string {
     if (code === "super_admin") return "super admin";
     return code;

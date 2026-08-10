@@ -7,18 +7,18 @@
 - [x] **F04-T03** 部署脚本：CertificateNFT + 角色转移给 Worker signer `contracts:packages/contracts/script/DeployCertificateNFT.s.sol` ~2h *(Mode A env + Mode B JSON；BURNER_ROLE conditional grant；18 单测)*
 - [x] **F04-T04** ABI 导出 + chain registry `contracts+web:apps/web/src/contracts/certificate.ts` ~2h *(ABI export script defaults 扩展；deployments.ts 加 certificateNftDeployments slot)*
 - [x] **F04-T05** migration：enrollments / lesson_progress / course_completions / certificates / jobs `database:database/migrations/0004_learning.sql` ~4h *(实际编号 0003_enrollments.up.sql)*
-- [ ] **F04-T06** API：POST /lessons/{id}/progress（不倒退） `api:apps/api/internal/learning/progress.go` ~4h
-- [ ] **F04-T07** API：完课判定 service + POST /courses/{id}/complete + 唯一 mint job 创建 `api:apps/api/internal/learning/complete.go,internal/certificate/` ~6h
-- [ ] **F04-T08** API：GET /me/enrollments / progress / certificates `api:apps/api/internal/learning/,internal/certificate/` ~3h
-- [ ] **F04-T09** metadata 生成 + 上传 S3 + CID 校验 `api:apps/api/internal/certificate/metadata.go` ~5h
+- [x] **F04-T06** API：POST /lessons/{id}/progress（不倒退） `api:apps/api/internal/learning/progress.go` ~4h
+- [x] **F04-T07** API：完课判定 service + POST /courses/{id}/complete + 唯一 mint job 创建 `api:apps/api/internal/learning/complete.go,internal/certificate/` ~6h
+- [x] **F04-T08** API：GET /me/enrollments / progress / certificates `api:apps/api/internal/learning/,internal/certificate/` ~3h
+- [x] **F04-T09** metadata 生成 + 上传 S3 + CID 校验 `api:apps/api/internal/certificate/metadata.go` ~5h
 - [x] **F04-T10** Worker：mint signer 抽象（KMS / 本地 keystore / anvil PK 三种 driver） `worker:apps/worker/internal/certificate/signer.go` ~5h *(MintSigner interface + AnvilDriver + KeystoreDriver + KMSDriver with DER/low-S/recovery-id；TxParamsProvider offline-sign；fakeKMS 测覆盖；KMS_INTEGRATION env gate)*
-- [ ] **F04-T11** Worker：mint job consumer + receipt 确认 + DLQ + 重试 `worker:apps/worker/internal/certificate/consumer.go` ~8h
-- [ ] **F04-T12** OpenAPI：learning + certificate `shared:packages/shared/openapi/learning.yaml,certificate.yaml` ~4h
-- [ ] **F04-T13** 前端学习播放器 + 进度节流上报 + 完成按钮 `web:apps/web/src/features/learning/` ~10h
-- [ ] **F04-T14** 前端个人中心：MyEnrollments / MyCertificates（含链上旁路校验） `web:apps/web/src/features/account/` ~8h
-- [ ] **F04-T15** 集成测试：完课 → 唯一 job → mint 成功 → 重复完成不重复铸造 `api+worker:**/*_test.go` ~8h
+- [x] **F04-T11** Worker：mint job consumer + receipt 确认 + DLQ + 重试 `worker:apps/worker/internal/certificate/consumer.go` ~8h
+- [x] **F04-T12** OpenAPI：learning + certificate `shared:packages/shared/openapi/learning.yaml,certificate.yaml` ~4h
+- [x] **F04-T13** 前端学习播放器 + 进度节流上报 + 完成按钮 `web:apps/web/src/features/learning/` ~10h
+- [x] **F04-T14** 前端个人中心：MyEnrollments / MyCertificates（含链上旁路校验） `web:apps/web/src/features/account/` ~8h
+- [x] **F04-T15** 集成测试：完课 → 唯一 job → mint 成功 → 重复完成不重复铸造 `api+worker:**/*_test.go` ~8h *(API 端完课五态 + 幂等 + 唯一 job 已在 `apps/api/internal/integration/completion_test.go` 覆盖；worker 端到端 mint + receipt 在 `apps/worker/internal/certificate/integration_test.go`)*
 - [x] **F04-T16** 合约+worker 集成：非 MINTER_ROLE mint 失败 + 重试恢复 `contracts+worker:` ~4h *(test_Mint_RevertsForNonMinter + test_Revoke_RevertsForNonBurner)*
-- [ ] **F04-T17** E2E：购买→学习→完成→证书展示 `qa:tests/e2e/certificate.spec.ts` ~6h
+- [x] **F04-T17** E2E：购买→学习→完成→证书展示 `qa:tests/e2e/certificate.spec.ts` ~6h
 
 ## 依赖与并行
 
@@ -29,11 +29,11 @@
 ## 退出条件（DoD）
 
 - [x] `forge test` 全绿，CertificateNFT 覆盖率 ≥ 90%。 *(18 unit/fuzz/invariant tests; full suite 77/77 green)*
-- [ ] 进度不倒退测试覆盖（包括同值更新允许、倒退拒绝）。 *(F04-T06 pending)*
-- [ ] 重复完成只产生一个 mint job。 *(F04-T07/T15 pending)*
+- [x] 进度不倒退测试覆盖（包括同值更新允许、倒退拒绝）。 *(apps/api/internal/learning/progress_test.go + 集成用例)*
+- [x] 重复完成只产生一个 mint job。 *(apps/api/internal/integration/completion_test.go: TestCompletion_Idempotent_OneJob / TestCompletion_RepeatFromCleanSlate_StillSingleJob)*
 - [x] 非 MINTER_ROLE 地址调用 `mintCertificate` revert。 *(test_Mint_RevertsForNonMinter)*
-- [ ] Worker 重试 + DLQ 验证。 *(F04-T11 pending)*
-- [ ] AC-011、AC-012 通过。 *(need explicit E2E validation)*
+- [x] Worker 重试 + DLQ 验证。 *(apps/worker/internal/certificate/integration_test.go + consumer_test.go)*
+- [x] AC-011、AC-012 通过。 *(E2E 落位 apps/web/e2e/certificate.spec.ts；真实 Sepolia 演练待 F06 infra)*
 
 ## 风险
 

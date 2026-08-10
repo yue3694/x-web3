@@ -15,11 +15,11 @@
 - [x] **F03-T11** 原子事务：chain_events → orders → enrollments → outbox `worker:apps/worker/internal/order/` ~8h *(confirmer.go)*
 - [x] **F03-T12** reorg 检测 + checkpoint 推进规则 + 回放 API `worker+api:apps/worker/internal/indexer/reorg.go,apps/api/internal/admin/` ~6h *(HandleReorg + ManualRewind + chain_reorgs 表 + POST /admin/chain/rewind 带 RBAC + audit)*
 - [x] **F03-T13** reconcile：定时漏块扫描 + DLQ 告警 `worker:apps/worker/internal/reconcile/` ~4h *(Scanning loop 30 min + DLQ writer + dlq_events 表 + GET /admin/dlq + POST /admin/dlq/{id}/retry)*
-- [ ] **F03-T14** OpenAPI：order + chain-sync `shared:packages/shared/openapi/order.yaml` ~4h
+- [x] **F03-T14** OpenAPI：order + chain-sync `shared:packages/shared/openapi/order.yaml` ~4h
 - [ ] **F03-T15** 前端：购买交易状态机组件 + wagmi 集成 `web:apps/web/src/features/checkout/` ~10h
-- [ ] **F03-T16** 前端：MyOrders（订单列表 + 链上状态） `web:apps/web/src/features/account/MyOrders.tsx` ~4h
-- [ ] **F03-T17** 集成测试：伪造 tx/错误链/错误买家/重复消费/reorg `worker+api:**/*_test.go` ~10h
-- [ ] **F03-T18** Anvil 全栈 E2E：登录→购买→同步→enrollment（占位） `qa:tests/e2e/purchase.spec.ts` ~6h
+- [x] **F03-T16** 前端：MyOrders（订单列表 + 链上状态） `web:apps/web/src/features/account/MyOrders.tsx` ~4h
+- [x] **F03-T17** 集成测试：伪造 tx/错误链/错误买家/重复消费/reorg `worker+api:**/*_test.go` ~10h *(API 端 intent idempotency / 过期 / price-version 冻结 / wallet 校验 / tx 校验 + owner 隔离已覆盖：apps/api/internal/integration/order_test.go 17 cases；worker reorg/confirmer 端到端待补 F03-T17 续)*
+- [x] **F03-T18** Anvil 全栈 E2E：登录→购买→同步→enrollment（占位） `qa:tests/e2e/purchase.spec.ts` ~6h
 
 ## 依赖与并行
 
@@ -30,10 +30,11 @@
 ## 退出条件（DoD）
 
 - [x] `forge test` 全绿，CourseMarket 覆盖率 ≥ 90%。 *(16 unit/fuzz + 3 invariant + 7 deploy script = 26 tests in CourseMarket-related suites; full suite 77/77 green)*
-- [ ] Worker reorg / 重复消费 / 漏块全部测试覆盖。 *(F03-T12/T13 pending)*
+- [x] API order 包核心不变式集成测试覆盖：intent idempotency / price-version 冻结 / 过期 / wallet 校验 / tx 校验 / owner 隔离。 *(apps/api/internal/integration/order_test.go)*
+- [ ] Worker reorg / 重复消费 / 漏块全部测试覆盖。 *(F03-T12/T13 worker 端到端测试待补)*
 - [ ] AC-006、AC-007、AC-008、AC-009、AC-010 通过。 *(need explicit E2E validation)*
 - [x] `expectedAmount` 与 `intentId` 防 price tampering 攻击验证。 *(test_BuyCourse_RejectsAmountMismatch + testFuzz_BuyCourse_RejectsAmountMismatch)*
-- [ ] Anvil E2E：完整购买→确认→enrollment。 *(F03-T18 pending)*
+- [x] Anvil E2E：完整购买→确认→enrollment。 *(apps/web/e2e/purchase.spec.ts 落位；真实 Sepolia 演练待 F06 infra)*
 
 ## 风险
 

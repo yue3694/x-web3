@@ -1,0 +1,422 @@
+openapi: 3.0.3
+info:
+    title: x-web3 University — Admin API
+    version: 0.1.0
+    description: |
+        超管路由契约（F06-T10）。与 `apps/api/internal/admin/handlers/` 严格对齐：
+
+          - GET    /admin/users                 用户列表（SYSTEM_ADMIN + audit 可查）
+          - POST   /admin/users/{id}/roles      授予角色（SYSTEM_ADMIN + audit 必留痕）
+          - DELETE /admin/users/{id}/roles/{role}  撤销角色（SYSTEM_ADMIN + audit 必留痕；reason 透传）
+          - GET    /admin/chain/sync            链同步状态（与 chain-sync.yaml 同源，此处仅引用 schema）
+          - POST   /admin/certificates/{id}/retry 证书 mint 失败重发（SYSTEM_ADMIN + audit）
+
+        链 rewind / DLQ 的契约见 `chain-sync.yaml`；本文件不重复定义以避免 drift。
+
+        所有 endpoint 均要求 `PermSystemAdmin`；鉴权由 main.go 装载
+        `auth.Middleware + rbac.Middleware(PermSystemAdmin)` 完成，
+        handler 内部仍做二次校验（defense in depth）。
+        鉴权：会话 cookie（与 `auth.yaml` 一致）。
+
+        **二次确认**：所有"写入型"endpoint（grant / revoke / retry）要求调用方
+        携带近期签发的 fresh JWT / confirm_token；前端通过 `<ConfirmRequired>`
+        组件拦击，调用者必须明确确认；后端在 handler 入口也校验 confirm_token
+        是否在 5 min 内由 SYSTEM_ADMIN 签发（详见 ADR-0004）。
+servers:
+    - url: https://api.x-web3.example.com/api/v1
+      description: Production
+    - url: http://localhost:8080/api/v1
+      description: Local dev
+tags:
+    - name: users
+      description: 用户列表 / 角色变更
+    - name: chainSync
+      description: 链同步状态（schema 引用 chain-sync.yaml）
+    - name: certificates
+      description: 证书 mint 重试
+paths:
+    /admin/users:
+        get:
+            tags: [users]
+            operationId: listUsers
+            summary: 列出系统用户（含角色 + 钱包）
+            description: |
+                对齐 `apps/api/internal/admin/handlers/users.go:UsersHandler.List`。
+                返回分页结果；默认 `page=1, pageSize=20`，`pageSize` 上限 100。
+                角色集合 = 该用户当前持有的全部 role code（含 student / teacher / super_admin）。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: query
+                  name: page
+                  schema:
+                      type: integer
+                      minimum: 1
+                      default: 1
+                - in: query
+                  name: pageSize
+                  schema:
+                      type: integer
+                      minimum: 1
+                      maximum: 100
+                      default: 20
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserListResponse'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    $ref: './errors.yaml#/components/responses/Forbidden'
+    /admin/users/{id}/roles:
+        post:
+            tags: [users]
+            operationId: grantRole
+            summary: 授予角色（SYSTEM_ADMIN + audit 必留痕）
+            description: |
+                对齐 `UsersHandler.GrantRole`。流程：
+                  1) handler 校验当前用户是 SYSTEM_ADMIN；
+                  2) 二次 rbac 校验（即便 middleware 已放过）；
+                  3) 写 audit row，Action = grant_role；reason 进 Before；
+                  4) 插入 user_roles；
+                  5) audit row 追加 After（roles 集合）。
+
+                **不允许给自己降级**（super_admin → student / 删除 super_admin）；
+                如需降级，须走人工审批流（不在 MVP 范围）。
+
+                **二次确认**：调用方必须先获取 fresh confirm_token（5 min TTL），
+                在 `X-Confirm-Token` header 携带；缺失或过期返回 403。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                - in: header
+                  name: X-Confirm-Token
+                  required: true
+                  schema:
+                      type: string
+                  description: SYSTEM_ADMIN 在 5 min 内签发的一次性确认 token。
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GrantRoleRequest'
+            responses:
+                '200':
+                    description: 成功（返回 { userId, role }）
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                required: [userId, role]
+                                properties:
+                                    userId:
+                                        type: string
+                                        format: uuid
+                                    role:
+                                        type: string
+                                        enum: [student, teacher, super_admin]
+                '400':
+                    $ref: './errors.yaml#/components/responses/BadRequest'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    $ref: './errors.yaml#/components/responses/Forbidden'
+                '404':
+                    $ref: './errors.yaml#/components/responses/NotFound'
+                '409':
+                    description: 角色已存在（`CONFLICT`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+    /admin/users/{id}/roles/{role}:
+        delete:
+            tags: [users]
+            operationId: revokeRole
+            summary: 撤销角色（SYSTEM_ADMIN + audit 必留痕）
+            description: |
+                对齐 `UsersHandler.RevokeRole`。流程与 grantRole 同，但**禁止撤销
+                最后一个 super_admin**（避免锁死）。
+
+                reason 通过 query string 透传给后端写入 audit（不写 body 以兼容 DELETE）。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                - in: path
+                  name: role
+                  required: true
+                  schema:
+                      type: string
+                      enum: [student, teacher, super_admin]
+                - in: query
+                  name: reason
+                  schema:
+                      type: string
+                - in: header
+                  name: X-Confirm-Token
+                  required: true
+                  schema:
+                      type: string
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                required: [userId, role]
+                                properties:
+                                    userId:
+                                        type: string
+                                        format: uuid
+                                    role:
+                                        type: string
+                '400':
+                    $ref: './errors.yaml#/components/responses/BadRequest'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    $ref: './errors.yaml#/components/responses/Forbidden'
+                '404':
+                    $ref: './errors.yaml#/components/responses/NotFound'
+                '409':
+                    description: |
+                        撤销最后一个 super_admin（`CONFLICT`，错误码 `LAST_SUPER_ADMIN`）。
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+    /admin/chain/sync:
+        get:
+            tags: [chainSync]
+            operationId: getChainSync
+            summary: 链同步状态（checkpoint / lag / RPC）
+            description: |
+                对齐 `ChainStatusHandler.Status`。入参 `chainId` 必填；
+                返回 `syncResponse` 包含 nextBlock / lastBlockHash / lagSeconds /
+                headBlockNumber / rpcAvailable 等。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: query
+                  name: chainId
+                  required: true
+                  schema:
+                      type: integer
+                      format: int64
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SyncResponse'
+                '400':
+                    $ref: './errors.yaml#/components/responses/BadRequest'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    $ref: './errors.yaml#/components/responses/Forbidden'
+    /admin/certificates/{id}/retry:
+        post:
+            tags: [certificates]
+            operationId: retryCertificate
+            summary: 证书 mint 失败重发
+            description: |
+                对齐 `CertRetryHandler.Retry`。把 certificates.status='failed' /
+                'dead' 的行连同其 certificate_jobs 一并重置 attempt=0、status='pending'、
+                next_retry_at=now()，由 worker consumer 下一轮拉到。
+
+                **二次确认**：必须携带 X-Confirm-Token。
+                **幂等**：相同 certId 多次调用安全；仅重置 pending 的行。
+
+                可选 body `{ reason }` 写入 audit。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                    type: string
+                    format: uuid
+                - in: header
+                  name: X-Confirm-Token
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                required: false
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                reason:
+                                    type: string
+            responses:
+                '200':
+                    description: 成功（返回 { certificateId, status, attempt }）
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                required: [certificateId, status, attempt]
+                                properties:
+                                    certificateId:
+                                        type: string
+                                        format: uuid
+                                    status:
+                                        type: string
+                                        enum: [pending, minting, confirmed, failed, dead]
+                                    attempt:
+                                        type: integer
+                '400':
+                    $ref: './errors.yaml#/components/responses/BadRequest'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    $ref: './errors.yaml#/components/responses/Forbidden'
+                '404':
+                    $ref: './errors.yaml#/components/responses/NotFound'
+                '409':
+                    description: 证书状态非 failed/dead（`CONFLICT`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+components:
+    securitySchemes:
+        sessionCookie:
+            type: apiKey
+            in: cookie
+            name: xweb3_sid
+    schemas:
+        UserListItem:
+            type: object
+            description: |
+                字段命名对齐 `apps/api/internal/admin/handlers/users.go:userListItem`。
+            required: [id, status, createdAt, roles, wallets]
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                displayName:
+                    type: string
+                status:
+                    type: string
+                    enum: [active, suspended, deleted]
+                createdAt:
+                    type: string
+                    format: date-time
+                roles:
+                    type: array
+                    items:
+                        type: string
+                        enum: [student, teacher, super_admin]
+                wallets:
+                    type: array
+                    items:
+                        type: string
+                        pattern: '^0x[a-fA-F0-9]{40}$'
+        UserListResponse:
+            type: object
+            required: [items, page, pageSize, total]
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserListItem'
+                page:
+                    type: integer
+                    minimum: 1
+                pageSize:
+                    type: integer
+                    minimum: 1
+                total:
+                    type: integer
+                    minimum: 0
+                    description: 满足过滤的用户总数（与 page 无关；用于前端分页）。
+        GrantRoleRequest:
+            type: object
+            description: |
+                字段命名对齐 `apps/api/internal/admin/handlers/users.go:grantRoleRequest`。
+            required: [role]
+            properties:
+                role:
+                    type: string
+                    enum: [student, teacher, super_admin]
+                reason:
+                    type: string
+                    description: |
+                        可选审计原因（写入 audit_logs.Before.action_reason）。
+                        UI 上必填以提高责任可追溯性；handler 不强制（向后兼容）。
+        SyncResponse:
+            type: object
+            description: |
+                字段命名对齐 `apps/api/internal/admin/handlers/chain_status.go:syncResponse`。
+            required: [chainId, consumer, nextBlock, rpcAvailable, checkedAt]
+            properties:
+                chainId:
+                    type: integer
+                    format: int64
+                consumer:
+                    type: string
+                    description: checkpoint consumer 标识；当前固定 `"indexer"`。
+                nextBlock:
+                    type: integer
+                    format: int64
+                    description: 下次消费的起始 block（worker 当前推进点）。
+                lastBlockHash:
+                    type: string
+                    nullable: true
+                    description: 上次消费的 block hash；缺失表示 checkpoint 未初始化。
+                lagSeconds:
+                    type: number
+                    format: double
+                    nullable: true
+                    description: 距当前链头的秒数；`null` 表示 RPC 不可达。
+                lagBlocks:
+                    type: integer
+                    format: int64
+                    nullable: true
+                    description: 距当前链头的块数。
+                headBlockNumber:
+                    type: integer
+                    format: int64
+                    nullable: true
+                headBlockHash:
+                    type: string
+                    nullable: true
+                headTimestamp:
+                    type: string
+                    format: date-time
+                    nullable: true
+                lastUpdatedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                rpcAvailable:
+                    type: boolean
+                rpcError:
+                    type: string
+                    nullable: true
+                checkedAt:
+                    type: string
+                    format: date-time

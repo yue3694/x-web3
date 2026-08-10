@@ -110,6 +110,7 @@ export interface AuditQuery {
     action?: string;
     from?: string;
     to?: string;
+    [k: string]: string | undefined;
 }
 
 /** 审计列表响应。 */
