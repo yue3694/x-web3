@@ -79,14 +79,51 @@ func (h *LearningHandler) GetPreview(c *httpkit.Context) {
 	c.JSON(http.StatusOK, cred)
 }
 
+// progressRequest POST /lessons/{id}/progress 请求体。
+type progressRequest struct {
+	Pct int `json:"pct" binding:"required"`
+}
+
+// PostProgress 写课时进度（F04-T08）。
+//
+// 200 OK：新 pct（首次写或递增）；
+// 200 OK + 与原值相同：幂等；
+// 403：未 enrollment；
+// 404：lesson 不存在；
+// 409：倒退拒绝。
+func (h *LearningHandler) PostProgress(c *httpkit.Context) {
+	uid, err := userIDFromCtx(c)
+	if err != nil {
+		httpkit.Error(c, http.StatusUnauthorized, errcode.SessionExpired, "no session", nil)
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpkit.Error(c, http.StatusBadRequest, errcode.BadRequest, "invalid lesson id", nil)
+		return
+	}
+	var body progressRequest
+	if !c.MustJSON(&body) {
+		return
+	}
+	got, err := h.svc.ReportProgress(c.Request.Context(), uid, id, body.Pct)
+	if err != nil {
+		mapLearningErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"lessonId": id, "pct": got})
+}
+
 func mapLearningErr(c *httpkit.Context, err error) {
 	switch {
-	case errors.Is(err, learning.ErrLessonNotFound):
+	case errors.Is(err, learning.ErrLessonNotFound), errors.Is(err, learning.ErrLessonMissing):
 		httpkit.Error(c, http.StatusNotFound, errcode.NotFound, "lesson not found", nil)
-	case errors.Is(err, learning.ErrNotEligible):
+	case errors.Is(err, learning.ErrNotEligible), errors.Is(err, learning.ErrLessonAccessDenied):
 		httpkit.Error(c, http.StatusForbidden, errcode.NotEnrolled, "not enrolled or not the author", nil)
 	case errors.Is(err, learning.ErrMediaNotReady):
 		httpkit.Error(c, http.StatusConflict, errcode.MediaNotReady, "media not ready", nil)
+	case errors.Is(err, learning.ErrProgressRegression):
+		httpkit.Error(c, http.StatusConflict, errcode.ProgressRegression, "progress cannot regress", nil)
 	default:
 		httpkit.Internal(c, err)
 	}
@@ -96,4 +133,5 @@ func mapLearningErr(c *httpkit.Context, err error) {
 func LearningEndpoints(r *gin.RouterGroup, h *LearningHandler) {
 	r.GET("/:id/playback", httpkit.Wrap(h.GetPlayback))
 	r.GET("/:id/preview", httpkit.Wrap(h.GetPreview))
+	r.POST("/:id/progress", httpkit.Wrap(h.PostProgress))
 }

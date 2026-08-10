@@ -98,7 +98,7 @@ SELECT l.media_asset_id, c.teacher_id, m.status, COALESCE(m.s3_key,'')
 FROM lessons l
 JOIN chapters ch ON ch.id = l.chapter_id
 JOIN course_versions v ON v.id = ch.course_version_id
-JOIN courses c ON c.id = v.course_id AND c.deleted_at IS NULL
+JOIN courses c ON c.id = v.course_id AND c.deleted_at IS NULL AND c.current_version = v.version
 LEFT JOIN media_assets m ON m.id = l.media_asset_id
 WHERE l.id = $1`, lessonID).Scan(&mediaID, &teacher, &status, &key)
 	if errors.Is(err, pgx.ErrNoRows) {

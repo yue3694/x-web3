@@ -33,6 +33,7 @@ import (
 	"github.com/x-web3/api/internal/audit"
 	"github.com/x-web3/api/internal/auth"
 	"github.com/x-web3/api/internal/catalog"
+	"github.com/x-web3/api/internal/certificate"
 	"github.com/x-web3/api/internal/comment"
 	"github.com/x-web3/api/internal/config"
 	"github.com/x-web3/api/internal/course"
@@ -108,6 +109,20 @@ func main() {
 
 	learningSvc := learning.NewService(pool, objStore)
 	orderSvc := order.NewService(pool, cfg.PurchaseIntentTTL)
+	metaGen, err := certificate.NewGenerator(objStore, "")
+	if err != nil {
+		logger.Fatal("cert_metadata_generator", zap.Error(err))
+	}
+	// MVP 默认 Sepolia；F05-T16 把 chain_id 注入 cfg 后再读 cfg.ChainID。
+	certificateSvc, err := certificate.NewService(certificate.ServiceConfig{
+		Pool:     pool,
+		Metadata: metaGen,
+		ChainID:  11155111,
+		Logger:   logger,
+	})
+	if err != nil {
+		logger.Fatal("cert_service_init", zap.Error(err))
+	}
 
 	router := httpkit.NewRouter(logger, cfg.WebOrigin)
 	v1 := router.Engine.Group("/api/v1")
@@ -136,6 +151,7 @@ func main() {
 	learningH := handlers.NewLearningHandler(learningSvc, auditWriter, logger)
 	commentH := handlers.NewCommentHandler(commentRepo, auditWriter, logger)
 	orderH := handlers.NewOrderHandler(orderSvc, auditWriter)
+	certificateH := handlers.NewCertificateHandler(certificateSvc, learningSvc, auditWriter, logger)
 
 	authGroup := v1.Group("/auth")
 	{
@@ -151,6 +167,8 @@ func main() {
 		meGroup.POST("/wallets/nonce", walletLimit, httpkit.Wrap(walletH.IssueNonce))
 		meGroup.POST("/wallets/link", walletLimit, httpkit.Wrap(walletH.Link))
 		meGroup.DELETE("/wallets/:walletId", walletLimit, httpkit.Wrap(walletH.Unbind))
+		meGroup.GET("/enrollments", httpkit.Wrap(certificateH.ListMineEnrollments))
+		meGroup.GET("/certificates", httpkit.Wrap(certificateH.ListMineCertificates))
 	}
 	catalogGroup := v1.Group("/courses")
 	{
@@ -163,6 +181,7 @@ func main() {
 	{
 		coursesAuthGroup.POST("/:id/comments", httpkit.Wrap(commentH.PostCreate))
 		coursesAuthGroup.DELETE("/comments/:id", httpkit.Wrap(commentH.DeleteMine))
+		coursesAuthGroup.POST("/:id/complete", httpkit.Wrap(certificateH.CompleteCourse))
 	}
 	orderGroup := v1.Group("/orders")
 	orderGroup.Use(auth.Middleware(verifier, sessionStore, pool))
@@ -203,6 +222,7 @@ func main() {
 	learningGroup.Use(auth.Middleware(verifier, sessionStore, pool))
 	{
 		learningGroup.GET("/:id/playback", httpkit.Wrap(learningH.GetPlayback))
+		learningGroup.POST("/:id/progress", httpkit.Wrap(learningH.PostProgress))
 	}
 
 	adminGroup := v1.Group("/admin")
