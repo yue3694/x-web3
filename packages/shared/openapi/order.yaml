@@ -1,0 +1,389 @@
+openapi: 3.0.3
+info:
+    title: x-web3 University — Order API
+    version: 0.1.0
+    description: |
+        购买意图 / 订单查询 API。
+        与 `apps/api/internal/handlers/order.go` 的 handler 严格对齐，
+        与 `apps/api/internal/order/order.go` 的视图层结构对齐。
+        鉴权：会话 cookie（与 `auth.yaml` 一致）。
+servers:
+    - url: https://api.x-web3.example.com/api/v1
+      description: Production
+    - url: http://localhost:8080/api/v1
+      description: Local dev
+tags:
+    - name: orders
+      description: 购买意图 / 订单生命周期
+paths:
+    /orders/purchase-intents:
+        post:
+            tags: [orders]
+            operationId: createPurchaseIntent
+            summary: 创建购买意图（幂等）
+            description: |
+                按 `(userId, idempotencyKey)` 幂等：同一用户重发同一 key 返回原记录。
+                选当前 `(chainId)` 价格版本，校验 wallet 归属当前 user 且 chain 匹配；
+                已购课程直接返回 `ALREADY_PURCHASED`。
+            security:
+                - sessionCookie: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PurchaseIntentRequest'
+            responses:
+                '201':
+                    description: Created
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PurchaseIntentResponse'
+                '400':
+                    $ref: './errors.yaml#/components/responses/BadRequest'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '404':
+                    $ref: './errors.yaml#/components/responses/NotFound'
+                '409':
+                    description: |
+                        已购买（`ALREADY_PURCHASED`）/ 钱包不属于当前用户（`FORBIDDEN`）。
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+    /orders/{intentId}/transactions:
+        post:
+            tags: [orders]
+            operationId: submitTransaction
+            summary: 提交 tx hash（intent.created → order.submitted）
+            description: |
+                校验：intent 属于当前 user、未过期、chain 匹配；tx hash 32 字节 hex。
+                提交后 intent 推到 `submitted`，order 进入 `submitted`，
+                worker 事件确认后推到 `confirming → confirmed`。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: path
+                  name: intentId
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TransactionSubmitRequest'
+            responses:
+                '202':
+                    description: Accepted
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrderResponse'
+                '400':
+                    $ref: './errors.yaml#/components/responses/BadRequest'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    $ref: './errors.yaml#/components/responses/Forbidden'
+                '404':
+                    $ref: './errors.yaml#/components/responses/NotFound'
+                '409':
+                    description: |
+                        intent 状态非法（`CONFLICT`）/ 同一 tx hash 已被其它 order 使用（`CONFLICT`）。
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '410':
+                    description: 购买意图已过期（`INTENT_EXPIRED`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+    /orders/{id}:
+        get:
+            tags: [orders]
+            operationId: getOrder
+            summary: 取单订单（admin 可看任意，普通用户只看自己）
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrderResponse'
+                '400':
+                    $ref: './errors.yaml#/components/responses/BadRequest'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    $ref: './errors.yaml#/components/responses/Forbidden'
+                '404':
+                    $ref: './errors.yaml#/components/responses/NotFound'
+    /me/orders:
+        get:
+            tags: [orders]
+            operationId: listMyOrders
+            summary: 当前用户订单列表（按 created_at desc）
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: query
+                  name: limit
+                  schema:
+                      type: integer
+                      minimum: 1
+                      maximum: 100
+                      default: 50
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                required: [items]
+                                properties:
+                                    items:
+                                        type: array
+                                        items:
+                                            $ref: '#/components/schemas/OrderResponse'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+components:
+    securitySchemes:
+        sessionCookie:
+            type: apiKey
+            in: cookie
+            name: xweb3_sid
+    schemas:
+        CourseRef:
+            type: object
+            description: |
+                订单上下文中嵌入的课程摘要。
+                字段对齐 `packages/shared/openapi/course.yaml#/components/schemas/Course` 子集；
+                该文件位于兄弟目录，跨文件 $ref 在 OpenAPI 3.0 工具支持有限，
+                故在此处声明一份精简引用版本，避免契约漂移。
+            required: [id]
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                title:
+                    type: string
+                priceMinor:
+                    type: integer
+                    format: int64
+                currency:
+                    type: string
+        PurchaseIntentRequest:
+            type: object
+            description: |
+                入参字段对齐 `apps/api/internal/handlers/order.go:createIntentReq`。
+            required: [courseId, chainId, walletId, idempotencyKey]
+            properties:
+                courseId:
+                    type: string
+                    format: uuid
+                    description: 目标课程 id；必须处于 `published` 状态。
+                chainId:
+                    type: integer
+                    format: int64
+                    description: EVM chain id（如 Sepolia=11155111）。
+                walletId:
+                    type: string
+                    format: uuid
+                    description: 当前用户在该 chain 上已绑定的钱包 id。
+                idempotencyKey:
+                    type: string
+                    minLength: 1
+                    maxLength: 128
+                    description: |
+                        客户端生成的幂等键。同一 `(userId, idempotencyKey)` 二次提交
+                        返回原 intent。
+        PurchaseIntentResponse:
+            type: object
+            description: |
+                返回字段对齐 `apps/api/internal/order.PurchaseIntent`。
+                命名沿用 `courseKey`（hex bytes 字符串）/ `priceVersion` / `amount`
+                (decimal string) / `expiresAt` / `chainId` / `contractAddress`，
+                与合约 `courseKey = keccak256(uuid)` 入参口径一致。
+            required:
+                - id
+                - userId
+                - walletId
+                - courseId
+                - priceId
+                - courseKey
+                - priceVersion
+                - chainId
+                - tokenAddress
+                - amount
+                - marketAddress
+                - idempotencyKey
+                - status
+                - expiresAt
+                - createdAt
+                - updatedAt
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                userId:
+                    type: string
+                    format: uuid
+                walletId:
+                    type: string
+                    format: uuid
+                courseId:
+                    type: string
+                    format: uuid
+                priceId:
+                    type: string
+                    format: uuid
+                courseKey:
+                    type: string
+                    description: |
+                        `keccak256(courseId)` 的 hex 编码（不含 0x 前缀）。
+                        与合约侧 `courseKey` 完全一致，用于链上事件匹配。
+                priceVersion:
+                    type: integer
+                    description: 冻结时的价格版本号；订单生命周期内不变。
+                chainId:
+                    type: integer
+                    format: int64
+                tokenAddress:
+                    type: string
+                    description: 计价 ERC20 合约地址。
+                amount:
+                    type: string
+                    description: |
+                        应付金额（decimal string）。使用 string 避免 JS number 精度丢失；
+                        前端用 BigInt / viem parseUnits 处理。
+                marketAddress:
+                    type: string
+                    description: |
+                        支付目标合约地址。历史语义上为 `marketAddress`，
+                        在 0.x 兼容窗口内也可视作 `contractAddress` 引用。
+                contractAddress:
+                    type: string
+                    description: |
+                        支付目标合约地址别名（与 `marketAddress` 同值），
+                        便于前端按"支付合约地址"语义直接消费。
+                idempotencyKey:
+                    type: string
+                status:
+                    type: string
+                    enum: [created, submitted, confirming, confirmed, failed, expired, reorged]
+                expiresAt:
+                    type: string
+                    format: date-time
+                createdAt:
+                    type: string
+                    format: date-time
+                updatedAt:
+                    type: string
+                    format: date-time
+        TransactionSubmitRequest:
+            type: object
+            description: |
+                入参字段对齐 `apps/api/internal/handlers/order.go:submitTxReq`。
+            required: [chainId, txHash]
+            properties:
+                chainId:
+                    type: integer
+                    format: int64
+                    description: 必须与 intent.chainId 一致；不一致返回 `WRONG_CHAIN`。
+                txHash:
+                    type: string
+                    pattern: '^0x[0-9a-fA-F]{64}$'
+                    description: |
+                        32 字节 hex（含 0x 前缀）。
+                        服务端会二次校验：去掉 0x 后长度必须恰好 64 hex 字符。
+        OrderResponse:
+            type: object
+            description: |
+                返回字段对齐 `apps/api/internal/order.Order`。
+                `enrollmentId` 在 order 尚未 confirmed 时为 null，
+                由 worker 事件确认后回填。
+            required:
+                - id
+                - intentId
+                - userId
+                - courseId
+                - status
+                - chainId
+                - createdAt
+                - updatedAt
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                intentId:
+                    type: string
+                    format: uuid
+                userId:
+                    type: string
+                    format: uuid
+                courseId:
+                    type: string
+                    format: uuid
+                status:
+                    type: string
+                    enum: [pending, confirming, confirmed, failed, reorged, dead]
+                    description: |
+                        状态机：
+                          - pending    : 已提交 tx hash，等待 worker 事件确认（与 submitted 同义）
+                          - confirming : worker 已观察到链上事件，待 N 块确认
+                          - confirmed  : 已确认，enrollment 已写入
+                          - failed     : 链上事件不满足条件（insufficient allowance / 金额不匹配等）
+                          - dead       : 永久失败（intent 已过期且无补单可能）
+                          - reorged    : 因链重组被回退
+                chainId:
+                    type: integer
+                    format: int64
+                onchainTxHash:
+                    type: string
+                    description: 链上 tx hash（hex，含 0x 前缀）；存在即说明已提交上链。
+                blockNumber:
+                    type: integer
+                    format: int64
+                    nullable: true
+                logIndex:
+                    type: integer
+                    nullable: true
+                confirmedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 链上事件最终确认时间；确认前 null。
+                enrollmentId:
+                    type: string
+                    format: uuid
+                    nullable: true
+                    description: |
+                        关联的 enrollment id。confirmed 之前为 null；reorged 后会被清空。
+                failureCode:
+                    type: string
+                    nullable: true
+                    description: 失败时的 errcode（如 `EVENT_REORGED`）。
+                createdAt:
+                    type: string
+                    format: date-time
+                updatedAt:
+                    type: string
+                    format: date-time

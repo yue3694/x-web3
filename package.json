@@ -33,9 +33,11 @@
     "worker:dev": "cd apps/worker && go run ./cmd/worker",
     "worker:test": "cd apps/worker && go test ./...",
     "db:migrate": "cd database && ./migrate.sh up",
-    "db:rollback": "cd database && ./migrate.sh down"
+    "db:rollback": "cd database && ./migrate.sh down",
+    "openapi:check": "node scripts/check-openapi.mjs"
   },
   "devDependencies": {
+    "js-yaml": "^4.1.0",
     "typescript": "^5.6.3"
   }
 }
