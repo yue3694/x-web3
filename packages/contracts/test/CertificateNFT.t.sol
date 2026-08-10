@@ -263,4 +263,27 @@ contract CertificateNFTTest is Test {
             }
         }
     }
+
+    // --------------------------------------------------------------------
+    //  ABI 锁：与 worker 端硬编码的签名保持一致
+    // --------------------------------------------------------------------
+
+    /// @notice 锁定 mintCertificate 的函数选择器。
+    /// @dev worker（apps/worker/internal/certificate/signer.go 的 mintCertificateABI）
+    ///      为了不依赖 forge 产物，把函数签名硬编码在 Go 常量里。改动这里的参数类型 /
+    ///      顺序 / 函数名都会让选择器变化，从而使 worker 签出的 calldata 打到一个不存在
+    ///      的函数上（链上静默 revert）。本测试就是那道防线：它红了，说明必须同步更新
+    ///      Go 侧的 mintCertificateABI。
+    function test_MintCertificateSelectorMatchesSignerABI() public pure {
+        // worker 侧 ABI: mintCertificate(address to, uint256 certificateId, string uri)
+        bytes4 expected = bytes4(keccak256("mintCertificate(address,uint256,string)"));
+
+        // 合约实际暴露的选择器。
+        assertEq(
+            CertificateNFT.mintCertificate.selector, expected, "mintCertificate selector drifted"
+        );
+
+        // 冗余锁：字面值写死，避免有人「同时」改合约和上面那行 keccak 字符串。
+        assertEq(expected, bytes4(0xa70d0e45), "mintCertificate selector literal drifted");
+    }
 }

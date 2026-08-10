@@ -4,14 +4,14 @@
 
 - [x] **F04-T01** CertificateNFT.sol：ERC721 + AccessControl + 防重复 + soulbound（默认） `contracts:packages/contracts/src/CertificateNFT.sol` ~6h *(ERC721URIStorage-style 自实现，tokenURI 持久化 + burn 时清理)*
 - [x] **F04-T02** CertificateNFT 单测 + fuzz（recipient / certificateId 边界 / 重复铸造） `contracts:packages/contracts/test/CertificateNFT.t.sol` ~6h *(18 unit/fuzz/invariant + 3 tokenURI = 21 tests)*
-- [ ] **F04-T03** 部署脚本：CertificateNFT + 角色转移给 Worker signer `contracts:packages/contracts/script/DeployCertificateNFT.s.sol` ~2h
+- [x] **F04-T03** 部署脚本：CertificateNFT + 角色转移给 Worker signer `contracts:packages/contracts/script/DeployCertificateNFT.s.sol` ~2h *(Mode A env + Mode B JSON；BURNER_ROLE conditional grant；18 单测)*
 - [x] **F04-T04** ABI 导出 + chain registry `contracts+web:apps/web/src/contracts/certificate.ts` ~2h *(ABI export script defaults 扩展；deployments.ts 加 certificateNftDeployments slot)*
 - [x] **F04-T05** migration：enrollments / lesson_progress / course_completions / certificates / jobs `database:database/migrations/0004_learning.sql` ~4h *(实际编号 0003_enrollments.up.sql)*
 - [ ] **F04-T06** API：POST /lessons/{id}/progress（不倒退） `api:apps/api/internal/learning/progress.go` ~4h
 - [ ] **F04-T07** API：完课判定 service + POST /courses/{id}/complete + 唯一 mint job 创建 `api:apps/api/internal/learning/complete.go,internal/certificate/` ~6h
 - [ ] **F04-T08** API：GET /me/enrollments / progress / certificates `api:apps/api/internal/learning/,internal/certificate/` ~3h
 - [ ] **F04-T09** metadata 生成 + 上传 S3 + CID 校验 `api:apps/api/internal/certificate/metadata.go` ~5h
-- [ ] **F04-T10** Worker：mint signer 抽象（KMS / 本地 keystore / anvil PK 三种 driver） `worker:apps/worker/internal/certificate/signer.go` ~5h
+- [x] **F04-T10** Worker：mint signer 抽象（KMS / 本地 keystore / anvil PK 三种 driver） `worker:apps/worker/internal/certificate/signer.go` ~5h *(MintSigner interface + AnvilDriver + KeystoreDriver + KMSDriver with DER/low-S/recovery-id；TxParamsProvider offline-sign；fakeKMS 测覆盖；KMS_INTEGRATION env gate)*
 - [ ] **F04-T11** Worker：mint job consumer + receipt 确认 + DLQ + 重试 `worker:apps/worker/internal/certificate/consumer.go` ~8h
 - [ ] **F04-T12** OpenAPI：learning + certificate `shared:packages/shared/openapi/learning.yaml,certificate.yaml` ~4h
 - [ ] **F04-T13** 前端学习播放器 + 进度节流上报 + 完成按钮 `web:apps/web/src/features/learning/` ~10h

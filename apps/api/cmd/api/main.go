@@ -29,6 +29,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	"github.com/x-web3/api/internal/admin/handlers" // package is `admin`
 	"github.com/x-web3/api/internal/audit"
 	"github.com/x-web3/api/internal/auth"
 	"github.com/x-web3/api/internal/catalog"
@@ -207,6 +208,12 @@ func main() {
 	adminGroup := v1.Group("/admin")
 	adminGroup.Use(auth.Middleware(verifier, sessionStore, pool), rbacEngine.Middleware(user.PermSystemAdmin))
 	adminGroup.GET("/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
+
+	// F03-T12 / F03-T13 切片：chain rewind + DLQ admin
+	chainRewindH := admin.NewChainRewindHandler(pool, auditWriter, rbacEngine, logger)
+	dlqStore := admin.NewPGDLQStore(pool)
+	dlqH := admin.NewDLQHandler(dlqStore, auditWriter, rbacEngine, logger)
+	admin.RegisterRoutes(adminGroup, chainRewindH, dlqH)
 
 	// 缓存失效订阅
 	go func() {

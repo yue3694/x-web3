@@ -55,6 +55,9 @@ func TestActionConstants_ArePastTenseVerbs(t *testing.T) {
 		audit.ActionCourseReview,
 		audit.ActionOrderCreated,
 		audit.ActionChainReplayed,
+		audit.ActionDLQRetriedReplay,
+		audit.ActionDLQRetriedIgnored,
+		audit.ActionDLQRetriedManual,
 	} {
 		if string(a) == "" {
 			t.Errorf("empty action constant")

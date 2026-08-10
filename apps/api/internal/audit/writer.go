@@ -37,6 +37,10 @@ const (
 	ActionCommentCreated     Action = "comment.created"
 	ActionCommentModerated   Action = "comment.moderated"
 	ActionPlaybackIssued     Action = "playback.issued"
+	// DLQ retry 三种 resolution 各对应一个，便于按 action 直接筛选。
+	ActionDLQRetriedReplay Action = "dlq.retried_replay"
+	ActionDLQRetriedIgnored Action = "dlq.retried_ignored"
+	ActionDLQRetriedManual  Action = "dlq.retried_manual"
 )
 
 // Entry 是单条审计写入参数。

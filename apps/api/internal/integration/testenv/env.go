@@ -144,6 +144,7 @@ func MigrationFiles() []string {
 		"0002_course.up.sql",
 		"0003_enrollments.up.sql",
 		"0004_order.up.sql",
+		"0007_reorg_reconcile.up.sql",
 	})
 }
 

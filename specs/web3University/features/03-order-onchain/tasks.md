@@ -10,11 +10,11 @@
 - [x] **F03-T06** API：创建购买意图（含 courseKey、price_version、过期、idempotency） `api:apps/api/internal/order/intent.go` ~5h *(实现在 order.go + handlers/order.go)*
 - [x] **F03-T07** API：POST /orders/{intentId}/transactions { txHash }（仅标记 submitted） `api:apps/api/internal/order/submit.go` ~3h *(实现在 order.go + handlers/order.go)*
 - [x] **F03-T08** API：GET /orders/{id}（owner/admin） `api:apps/api/internal/order/query.go` ~2h *(实现在 order.go + handlers/order.go)*
-- [ ] **F03-T09** Worker 初始化：WS 监听 + HTTP 回扫 + checkpoint + RPC fallback + 优雅退出 `worker:apps/worker/cmd/worker/main.go,internal/indexer/` ~10h
+- [x] **F03-T09** Worker 初始化：WS 监听 + HTTP 回扫 + checkpoint + RPC fallback + 优雅退出 `worker:apps/worker/cmd/worker/main.go,internal/indexer/` ~10h *(RPCPool multi-client + WS SubscribeNewHead + checkpoint.Load/Save + graceful drain)*
 - [x] **F03-T10** CoursePurchased decoder + receipt 全字段校验 `worker:apps/worker/internal/chain/decoder.go` ~6h
 - [x] **F03-T11** 原子事务：chain_events → orders → enrollments → outbox `worker:apps/worker/internal/order/` ~8h *(confirmer.go)*
-- [ ] **F03-T12** reorg 检测 + checkpoint 推进规则 + 回放 API `worker+api:apps/worker/internal/indexer/reorg.go,apps/api/internal/admin/` ~6h
-- [ ] **F03-T13** reconcile：定时漏块扫描 + DLQ 告警 `worker:apps/worker/internal/reconcile/` ~4h
+- [x] **F03-T12** reorg 检测 + checkpoint 推进规则 + 回放 API `worker+api:apps/worker/internal/indexer/reorg.go,apps/api/internal/admin/` ~6h *(HandleReorg + ManualRewind + chain_reorgs 表 + POST /admin/chain/rewind 带 RBAC + audit)*
+- [x] **F03-T13** reconcile：定时漏块扫描 + DLQ 告警 `worker:apps/worker/internal/reconcile/` ~4h *(Scanning loop 30 min + DLQ writer + dlq_events 表 + GET /admin/dlq + POST /admin/dlq/{id}/retry)*
 - [ ] **F03-T14** OpenAPI：order + chain-sync `shared:packages/shared/openapi/order.yaml` ~4h
 - [ ] **F03-T15** 前端：购买交易状态机组件 + wagmi 集成 `web:apps/web/src/features/checkout/` ~10h
 - [ ] **F03-T16** 前端：MyOrders（订单列表 + 链上状态） `web:apps/web/src/features/account/MyOrders.tsx` ~4h
