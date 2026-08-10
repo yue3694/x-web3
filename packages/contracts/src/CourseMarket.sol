@@ -11,9 +11,12 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 /// @notice CourseMarket 的对外接口；前端 / worker 用同样的 ABI。
 interface ICourseMarket {
     function buyCourse(bytes32 courseKey, uint256 expectedAmount, bytes16 intentId) external;
-    function configureCourse(bytes32 courseKey, address token, uint256 amount, uint256 priceVersion) external;
+    function configureCourse(bytes32 courseKey, address token, uint256 amount, uint256 priceVersion)
+        external;
 
-    event CourseConfigured(bytes32 indexed courseKey, address token, uint256 amount, uint256 priceVersion);
+    event CourseConfigured(
+        bytes32 indexed courseKey, address token, uint256 amount, uint256 priceVersion
+    );
     event CoursePurchased(
         bytes32 indexed courseKey,
         address indexed buyer,
@@ -68,7 +71,9 @@ contract CourseMarket is ICourseMarket, Ownable, Pausable, ReentrancyGuard {
     {
         if (token == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
-        _configs[courseKey] = CourseConfig({token: token, amount: amount, priceVersion: priceVersion, configured: true});
+        _configs[courseKey] = CourseConfig({
+            token: token, amount: amount, priceVersion: priceVersion, configured: true
+        });
         emit CourseConfigured(courseKey, token, amount, priceVersion);
     }
 
@@ -89,11 +94,17 @@ contract CourseMarket is ICourseMarket, Ownable, Pausable, ReentrancyGuard {
         // interactions
         IERC20(cfg.token).safeTransferFrom(msg.sender, owner(), cfg.amount);
 
-        emit CoursePurchased(courseKey, msg.sender, cfg.token, cfg.amount, intentId, cfg.priceVersion);
+        emit CoursePurchased(
+            courseKey, msg.sender, cfg.token, cfg.amount, intentId, cfg.priceVersion
+        );
     }
 
     /// @notice 查询当前配置。
-    function getConfig(bytes32 courseKey) external view returns (address token, uint256 amount, uint256 priceVersion) {
+    function getConfig(bytes32 courseKey)
+        external
+        view
+        returns (address token, uint256 amount, uint256 priceVersion)
+    {
         CourseConfig memory cfg = _configs[courseKey];
         return (cfg.token, cfg.amount, cfg.priceVersion);
     }

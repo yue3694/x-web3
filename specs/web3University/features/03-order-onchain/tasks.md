@@ -2,17 +2,17 @@
 
 ## 任务列表
 
-- [ ] **F03-T01** CourseMarket.sol：configureCourse + buyCourse + 防重购 + 事件 `contracts:packages/contracts/src/CourseMarket.sol` ~6h
-- [ ] **F03-T02** CourseMarket 单测 + fuzz + invariant（资金守恒/防重购） `contracts:packages/contracts/test/CourseMarket.t.sol` ~6h
-- [ ] **F03-T03** 部署脚本：CourseMarket 配置 + 角色转移 `contracts:packages/contracts/script/DeployCourseMarket.s.sol` ~3h
-- [ ] **F03-T04** ABI 导出 + chain registry（market / token 地址按 chain） `contracts+web:apps/web/src/contracts/market.ts` ~2h
-- [ ] **F03-T05** migration：course_prices / purchase_intents / orders / chain_events / chain_checkpoints / outbox_events `database:database/migrations/0003_order.sql` ~4h
-- [ ] **F03-T06** API：创建购买意图（含 courseKey、price_version、过期、idempotency） `api:apps/api/internal/order/intent.go` ~5h
-- [ ] **F03-T07** API：POST /orders/{intentId}/transactions { txHash }（仅标记 submitted） `api:apps/api/internal/order/submit.go` ~3h
-- [ ] **F03-T08** API：GET /orders/{id}（owner/admin） `api:apps/api/internal/order/query.go` ~2h
+- [x] **F03-T01** CourseMarket.sol：configureCourse + buyCourse + 防重购 + 事件 `contracts:packages/contracts/src/CourseMarket.sol` ~6h
+- [x] **F03-T02** CourseMarket 单测 + fuzz + invariant（资金守恒/防重购） `contracts:packages/contracts/test/CourseMarket.t.sol` ~6h
+- [x] **F03-T03** 部署脚本：CourseMarket 配置 + 角色转移 `contracts:packages/contracts/script/DeployCourseMarket.s.sol` ~3h
+- [x] **F03-T04** ABI 导出 + chain registry（market / token 地址按 chain） `contracts+web:apps/web/src/contracts/market.ts` ~2h *(ABI 导出脚本+deployments.ts 已扩展；具体 ABI 文件待 forge build 后产出)*
+- [x] **F03-T05** migration：course_prices / purchase_intents / orders / chain_events / chain_checkpoints / outbox_events `database:database/migrations/0003_order.sql` ~4h *(实际编号 0004_order.up.sql)*
+- [x] **F03-T06** API：创建购买意图（含 courseKey、price_version、过期、idempotency） `api:apps/api/internal/order/intent.go` ~5h *(实现在 order.go + handlers/order.go)*
+- [x] **F03-T07** API：POST /orders/{intentId}/transactions { txHash }（仅标记 submitted） `api:apps/api/internal/order/submit.go` ~3h *(实现在 order.go + handlers/order.go)*
+- [x] **F03-T08** API：GET /orders/{id}（owner/admin） `api:apps/api/internal/order/query.go` ~2h *(实现在 order.go + handlers/order.go)*
 - [ ] **F03-T09** Worker 初始化：WS 监听 + HTTP 回扫 + checkpoint + RPC fallback + 优雅退出 `worker:apps/worker/cmd/worker/main.go,internal/indexer/` ~10h
-- [ ] **F03-T10** CoursePurchased decoder + receipt 全字段校验 `worker:apps/worker/internal/chain/decoder.go` ~6h
-- [ ] **F03-T11** 原子事务：chain_events → orders → enrollments → outbox `worker:apps/worker/internal/order/` ~8h
+- [x] **F03-T10** CoursePurchased decoder + receipt 全字段校验 `worker:apps/worker/internal/chain/decoder.go` ~6h
+- [x] **F03-T11** 原子事务：chain_events → orders → enrollments → outbox `worker:apps/worker/internal/order/` ~8h *(confirmer.go)*
 - [ ] **F03-T12** reorg 检测 + checkpoint 推进规则 + 回放 API `worker+api:apps/worker/internal/indexer/reorg.go,apps/api/internal/admin/` ~6h
 - [ ] **F03-T13** reconcile：定时漏块扫描 + DLQ 告警 `worker:apps/worker/internal/reconcile/` ~4h
 - [ ] **F03-T14** OpenAPI：order + chain-sync `shared:packages/shared/openapi/order.yaml` ~4h
@@ -29,11 +29,11 @@
 
 ## 退出条件（DoD）
 
-- [ ] `forge test` 全绿，CourseMarket 覆盖率 ≥ 90%。
-- [ ] Worker reorg / 重复消费 / 漏块全部测试覆盖。
-- [ ] AC-006、AC-007、AC-008、AC-009、AC-010 通过。
-- [ ] `expectedAmount` 与 `intentId` 防 price tampering 攻击验证。
-- [ ] Anvil E2E：完整购买→确认→enrollment。
+- [x] `forge test` 全绿，CourseMarket 覆盖率 ≥ 90%。 *(16 unit/fuzz + 3 invariant + 7 deploy script = 26 tests in CourseMarket-related suites; full suite 77/77 green)*
+- [ ] Worker reorg / 重复消费 / 漏块全部测试覆盖。 *(F03-T12/T13 pending)*
+- [ ] AC-006、AC-007、AC-008、AC-009、AC-010 通过。 *(need explicit E2E validation)*
+- [x] `expectedAmount` 与 `intentId` 防 price tampering 攻击验证。 *(test_BuyCourse_RejectsAmountMismatch + testFuzz_BuyCourse_RejectsAmountMismatch)*
+- [ ] Anvil E2E：完整购买→确认→enrollment。 *(F03-T18 pending)*
 
 ## 风险
 

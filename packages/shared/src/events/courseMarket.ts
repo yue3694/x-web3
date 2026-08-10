@@ -37,6 +37,6 @@ export interface DecodedLog<T> {
 }
 
 export const COURSE_MARKET_EVENT_SIGNATURES = {
-  CourseConfigured: '0x' as Hex, // 由 keccak256("CourseConfigured(bytes32,address,uint256,uint256)") 计算后填入
-  CoursePurchased: '0x' as Hex,
+  CourseConfigured: '0x7c4bd32c23ea1943334ebe7040a4294f81f2b76a6c27bfc63245e86971ff9264',
+  CoursePurchased: '0xee2c004361a941cef00dd638a722b034a58392d57a99eab2617793b17a6005ad',
 } as const;

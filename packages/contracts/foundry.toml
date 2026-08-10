@@ -23,11 +23,20 @@ via_ir = false
 fs_permissions = [
     { access = "read", path = "./" },
     { access = "read", path = "./node_modules" },
+    { access = "read-write", path = "./test/fixtures" },
 ]
 auto_detect_solc = false
 
 # Verbose revert reasons in tests.
 verbosity = 2
+
+# Invariant / fuzz tuning. CourseMarket invariant suite explores a small state
+# space; cap depth so CI does not spend minutes per run. Override per-test via
+# FOUNDRY_INVARIANT_* env vars or `forge test --invariant-*` flags.
+[invariant]
+runs = 32
+depth = 64
+fail_on_revert = false
 
 [fmt]
 line_length = 100

@@ -149,10 +149,7 @@ contract Notepad {
     ///           3. emit：事件跟随状态变更。
     ///         本合约无 external call，所以"interactions"为空——CEI 仍然写成
     ///         上述顺序，未来引入转账 / hook 时不需重构。
-    function createNote(string calldata title, string calldata body)
-        external
-        returns (uint256 id)
-    {
+    function createNote(string calldata title, string calldata body) external returns (uint256 id) {
         // ---- checks（校验失败抛自定义错误，省 gas 且链下可读）----
         _checkTitle(title);
         _checkBody(body);
@@ -173,9 +170,7 @@ contract Notepad {
     ///         没有改 title / body 长度（如果想精确判定是否真的变了，需要
     ///         引入短哈希或旧值字段——本合约选择不优化，每次都按"有变更"处
     ///         理，事件仍然发出。
-    function updateNote(uint256 id, string calldata title, string calldata body)
-        external
-    {
+    function updateNote(uint256 id, string calldata title, string calldata body) external {
         // 同样走 checks（length）→ effects（写 storage）→ emit
         _checkTitle(title);
         _checkBody(body);

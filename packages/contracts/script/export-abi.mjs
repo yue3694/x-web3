@@ -28,8 +28,12 @@ const OUT_DIR = resolve(root, "apps/web/src/contracts");
 
 // Default: export everything this monorepo ships. Override by passing
 // contract names as positional args, e.g. `node export-abi.mjs Counter`.
+// 新合约（CourseMarket / YDToken / CertificateNFT）默认纳入；旧演示合约
+// （Counter / Notepad）继续保留供 devnet smoke 使用。
 const REQUESTED = process.argv.slice(2);
-const CONTRACTS = REQUESTED.length > 0 ? REQUESTED : ["Counter", "Notepad"];
+const CONTRACTS = REQUESTED.length > 0
+    ? REQUESTED
+    : ["Counter", "Notepad", "CourseMarket", "YDToken", "CertificateNFT"];
 
 async function exists(path) {
     try {

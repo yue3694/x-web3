@@ -2,10 +2,10 @@
 
 ## 任务列表
 
-- [ ] **F05-T01** YDToken.sol：ERC20 + Permit + AccessControl + Pausable + cap + treasury `contracts:packages/contracts/src/YDToken.sol` ~5h
-- [ ] **F05-T02** YDToken 单测：cap / mint / pause / permit + fuzz `contracts:packages/contracts/test/YDToken.t.sol` ~4h
+- [x] **F05-T01** YDToken.sol：ERC20 + Permit + AccessControl + Pausable + cap + treasury `contracts:packages/contracts/src/YDToken.sol` ~5h *(per ADR-0002: cap=1B, initial=200M)*
+- [x] **F05-T02** YDToken 单测：cap / mint / pause / permit + fuzz `contracts:packages/contracts/test/YDToken.t.sol` ~4h *(17 unit + 1 fuzz + 1 invariant)*
 - [ ] **F05-T03** YDToken 部署脚本：treasury 多签转移 checklist `contracts:packages/contracts/script/DeployYDToken.s.sol` ~3h
-- [ ] **F05-T04** ABI 导出 + chain registry（YD/USDC 主池地址） `contracts+web:apps/web/src/contracts/token.ts,swap.ts` ~3h
+- [x] **F05-T04** ABI 导出 + chain registry（YD/USDC 主池地址） `contracts+web:apps/web/src/contracts/token.ts,swap.ts` ~3h *(ABI export script + deployments.ts + ydTokenDeployments slot)*
 - [ ] **F05-T05** 前端 SwapCard：网络/余额检查 + QuoterV2 + 滑点/deadline/影响 `web:apps/web/src/features/swap/` ~10h
 - [ ] **F05-T06** 前端价格影响提示 + 阻止逻辑（≥ 10% 阻止） `web:apps/web/src/features/swap/SlippageControl.tsx` ~3h
 - [ ] **F05-T07** 集成测试：本地 anvil fork Uniswap 主网做 swap `web:apps/web/src/features/swap/SwapCard.test.tsx` ~4h
@@ -21,11 +21,11 @@
 
 ## 退出条件（DoD）
 
-- [ ] YD Token cap / mint / pause 单测覆盖。
-- [ ] Sepolia 部署后多签角色转移 checklist 完成并截图留档。
-- [ ] SwapCard：滑点 + deadline + 价格影响全部 UI 校验。
-- [ ] Anvil fork 测试 swap 路径。
-- [ ] （条件阶段）Oracle stale/fallback 测试。
+- [x] YD Token cap / mint / pause 单测覆盖。 *(17 unit tests + fuzz + invariant)*
+- [ ] Sepolia 部署后多签角色转移 checklist 完成并截图留档。 *(F05-T03 pending)*
+- [ ] SwapCard：滑点 + deadline + 价格影响全部 UI 校验。 *(F05-T05/T06 pending)*
+- [ ] Anvil fork 测试 swap 路径。 *(F05-T07 pending)*
+- [ ] （条件阶段）Oracle stale/fallback 测试。 *(F05-T08/T09 conditional)*
 
 ## 风险
 
