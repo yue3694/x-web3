@@ -27,13 +27,17 @@ type Router struct {
 	Logger *zap.Logger
 }
 
-// NewRouter 创建带 request-id + recovery + access log 的路由。
+// NewRouter 创建带 request-id + recovery + access log + metrics 的路由。
+//
+// /metrics 端点由调用方单独挂载（promhttp.Handler），不经过本路由栈，
+// 避免 metrics 中间件记录自身抓取带来的高频样本。
 func NewRouter(logger *zap.Logger, allowedOrigin string) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	e := gin.New()
 	e.Use(requestIDMiddleware())
 	e.Use(corsMiddleware(allowedOrigin))
 	e.Use(accessLogMiddleware(logger))
+	e.Use(MetricsMiddleware())
 	e.Use(recoveryMiddleware(logger))
 	return &Router{Engine: e, Logger: logger}
 }

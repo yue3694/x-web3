@@ -432,8 +432,33 @@ func userIDFromCtx(c *httpkit.Context) (uuid.UUID, error) {
 //
 // 调用方需在挂 group 时已经加 auth.Middleware + rbac.Middleware(PermSystemAdmin)；
 // 此函数只追加 endpoint。
-func RegisterRoutes(group *gin.RouterGroup, rewind *ChainRewindHandler, dlq *DLQHandler) {
-	group.POST("/chain/rewind", httpkit.Wrap(rewind.PostRewind))
-	group.GET("/dlq", httpkit.Wrap(dlq.List))
-	group.POST("/dlq/:id/retry", httpkit.Wrap(dlq.Retry))
+//
+// 参数说明：每个 handler 可以为 nil（不挂对应路由），便于 main.go 按需启用。
+// 已存在 handler 的 nil 行为与新增 handler 一致：跳过挂载，不影响其它路由。
+func RegisterRoutes(
+	group *gin.RouterGroup,
+	rewind *ChainRewindHandler,
+	dlq *DLQHandler,
+	users *UsersHandler,
+	chainStatus *ChainStatusHandler,
+	certRetry *CertRetryHandler,
+) {
+	if rewind != nil {
+		group.POST("/chain/rewind", httpkit.Wrap(rewind.PostRewind))
+	}
+	if dlq != nil {
+		group.GET("/dlq", httpkit.Wrap(dlq.List))
+		group.POST("/dlq/:id/retry", httpkit.Wrap(dlq.Retry))
+	}
+	if users != nil {
+		group.GET("/users", httpkit.Wrap(users.List))
+		group.POST("/users/:id/roles", httpkit.Wrap(users.GrantRole))
+		group.DELETE("/users/:id/roles/:role", httpkit.Wrap(users.RevokeRole))
+	}
+	if chainStatus != nil {
+		group.GET("/chain/sync", httpkit.Wrap(chainStatus.Status))
+	}
+	if certRetry != nil {
+		group.POST("/certificates/:id/retry", httpkit.Wrap(certRetry.Retry))
+	}
 }

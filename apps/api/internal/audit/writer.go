@@ -16,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+
+	"github.com/x-web3/api/internal/httpkit"
 )
 
 // Action 是审计动词（动词过去式）。
@@ -109,12 +111,15 @@ func (w *Writer) Log(ctx context.Context, e Entry) error {
 		beforeB, afterB, e.CorrelationID, e.IP, e.UserAgent,
 	)
 	if err != nil {
+		httpkit.RecordAuditResult("error")
 		w.logger.Error("audit_write_failed",
 			zap.String("action", string(e.Action)),
 			zap.Error(err),
 		)
+		return err
 	}
-	return err
+	httpkit.RecordAuditResult("success")
+	return nil
 }
 
 // LogTx 与业务事务同 commit；用于"做这件事 → 留痕"必须同生共死。
@@ -126,7 +131,12 @@ func (w *Writer) LogTx(ctx context.Context, tx pgx.Tx, e Entry) error {
 		e.ActorUserID, string(e.Action), e.TargetType, e.TargetID,
 		beforeB, afterB, e.CorrelationID, e.IP, e.UserAgent,
 	)
-	return err
+	if err != nil {
+		httpkit.RecordAuditResult("error")
+		return err
+	}
+	httpkit.RecordAuditResult("success")
+	return nil
 }
 
 // auditInsertSQL 集中维护 INSERT 语句。

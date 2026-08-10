@@ -148,6 +148,61 @@ func (e *Engine) Require(code string) func(ctx context.Context, userID uuid.UUID
 	}
 }
 
+// HasRole 判断用户是否持有任一指定 role code（含缓存）。用于 handler 内部
+// 二次校验或单纯按角色判断的场景。
+func (e *Engine) HasRole(ctx context.Context, userID uuid.UUID, codes ...string) (bool, error) {
+	if userID == uuid.Nil {
+		return false, nil
+	}
+	// 命中缓存时跳过 source 二次调用。
+	e.mu.RLock()
+	entry, ok := e.c[userID]
+	e.mu.RUnlock()
+	if ok && time.Since(entry.cachedAt) < e.ttl {
+		for _, r := range entry.roles {
+			for _, want := range codes {
+				if r == want {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	}
+	roles, err := e.src.ListRoleCodes(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, r := range roles {
+		for _, want := range codes {
+			if r == want {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// RequireRole 是基于角色的 guard；用于「仅 super_admin 可访问」一类硬门。
+//
+// 调用方式：rbac.RequireRole(user.RoleSuperAdmin)
+// 与 Require(code) 的语义差异：这里只看角色，不看 permission 表项；
+// 对 RoleSuperAdmin 维持通配语义（与 Has() 一致）。
+func (e *Engine) RequireRole(codes ...string) func(ctx context.Context, userID uuid.UUID) error {
+	return func(ctx context.Context, userID uuid.UUID) error {
+		if userID == uuid.Nil {
+			return errors.New("rbac: anonymous")
+		}
+		ok, err := e.HasRole(ctx, userID, codes...)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.New("rbac: forbidden")
+		}
+		return nil
+	}
+}
+
 // Middleware adapts permission checks to Gin after auth.Middleware has set user_id.
 func (e *Engine) Middleware(code string) gin.HandlerFunc {
 	require := e.Require(code)

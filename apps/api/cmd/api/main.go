@@ -26,6 +26,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
@@ -126,6 +127,19 @@ func main() {
 
 	router := httpkit.NewRouter(logger, cfg.WebOrigin)
 	v1 := router.Engine.Group("/api/v1")
+
+	// /metrics：Prometheus 抓取端点。
+	//
+	// 注意：按 Prometheus 惯例 /metrics 是公开抓取端点（无 auth）。
+	// 本服务默认 0.0.0.0 绑定，生产部署请用防火墙 / sidecar 把 APIPort 限制到
+	// 内部抓取网段（不要直接对外网开放，避免暴露自定义业务指标与命名空间）。
+	//
+	// HandlerFor 用 DefaultRegistry 而不是 promhttp.Handler() 默认注册表，
+	// 这样可以确保 service 内部指标 + 默认 go/process collector 都被抓取。
+	router.Engine.GET("/metrics", gin.WrapH(promhttp.HandlerFor(
+		httpkit.DefaultRegistry,
+		promhttp.HandlerOpts{Registry: httpkit.DefaultRegistry},
+	)))
 
 	// Health
 	router.Engine.GET("/healthz", func(c *gin.Context) {
@@ -233,7 +247,11 @@ func main() {
 	chainRewindH := admin.NewChainRewindHandler(pool, auditWriter, rbacEngine, logger)
 	dlqStore := admin.NewPGDLQStore(pool)
 	dlqH := admin.NewDLQHandler(dlqStore, auditWriter, rbacEngine, logger)
-	admin.RegisterRoutes(adminGroup, chainRewindH, dlqH)
+	// T05（part）/ T06：用户管理 / 链同步状态 / 证书 mint 重试
+	usersH := admin.NewUsersHandler(pool, auditWriter, rbacEngine, logger)
+	chainStatusH := admin.NewChainStatusHandler(pool, cfg, rbacEngine, logger)
+	certRetryH := admin.NewCertRetryHandler(pool, auditWriter, rbacEngine, logger)
+	admin.RegisterRoutes(adminGroup, chainRewindH, dlqH, usersH, chainStatusH, certRetryH)
 
 	// 缓存失效订阅
 	go func() {

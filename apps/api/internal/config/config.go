@@ -44,6 +44,9 @@ type Config struct {
 	// Order
 	PurchaseIntentTTL time.Duration // 创建购买意图的过期时间（默认 15 min）
 
+	// Chain
+	SepoliaRPCURL string // Sepolia JSON-RPC endpoint（admin/chain/sync 用）
+
 	// Logging
 	LogLevel string
 }
@@ -75,6 +78,7 @@ func Load() (*Config, error) {
 		APIDomain:       getEnv("API_DOMAIN", "localhost:8080"),
 		WalletNonceTTL:    time.Duration(getEnvInt("WALLET_NONCE_TTL_SECONDS", 300)) * time.Second,
 		PurchaseIntentTTL: time.Duration(getEnvInt("PURCHASE_INTENT_TTL_MINUTES", 15)) * time.Minute,
+		SepoliaRPCURL:     os.Getenv("SEPOLIA_RPC_URL"),
 		LoginRateLimit:    getEnvInt("LOGIN_RATE_LIMIT_PER_MINUTE", 10),
 		WalletRateLimit:   getEnvInt("WALLET_RATE_LIMIT_PER_MINUTE", 5),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),

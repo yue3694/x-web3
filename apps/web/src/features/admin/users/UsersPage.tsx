@@ -1,0 +1,228 @@
+/**
+ * UsersPage — Admin → Users 子页。
+ *
+ * 行为：
+ *   - 拉取 GET /admin/users?page=&pageSize=；
+ *   - 列表展示 email / 钱包数 / 角色 chip，每行嵌 <UserRow> 内的 ConfirmRequired 弹窗；
+ *   - 分页走 prev / next + 直接跳页；服务端 404/405 时显示"接口未上线"降级。
+ *
+ * 设计取舍：
+ *   - 角色全集（availableRoles）暂时硬编码在常量中，等后端 /admin/roles 落地后
+ *     替换为 fetch；当前不阻塞用户故事。
+ *   - 鉴权：RequirePermission 已经在 AdminLayout 里包过一层；本组件依然调用
+ *     `useSession().hasPermission('admin')` 进一步保护渲染。
+ */
+
+import {useCallback, useEffect, useState} from "react";
+
+import {ApiClientError} from "@/api/client";
+import {useSession} from "@/auth/SessionContext";
+import {AdminLayout} from "@/features/admin/AdminLayout";
+import {adminApi} from "@/features/admin/adminApi";
+import type {AdminRoleCode, AdminUser} from "@/features/admin/adminTypes";
+
+import {UserRow} from "./UserRow";
+
+const KNOWN_ROLES: readonly AdminRoleCode[] = ["student", "teacher", "super_admin"];
+
+const DEFAULT_PAGE_SIZE = 20;
+
+const sectionStyle = {marginTop: 0} as const;
+
+const headerStyle = {
+    marginBottom: "0.8rem",
+} as const;
+
+const tableHeadStyle = {
+    display: "grid",
+    gridTemplateColumns: "1.6fr 0.8fr 1.4fr 1.6fr",
+    gap: "0.8rem",
+    padding: "0.5rem 0.9rem",
+    color: "var(--fg-muted)",
+    font: "500 0.74rem/1 var(--font-mono)",
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    borderBottom: "1px solid var(--border)",
+} as const;
+
+const listStyle = {
+    listStyle: "none",
+    margin: 0,
+    padding: 0,
+} as const;
+
+const pagerStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.6rem",
+    marginTop: "0.8rem",
+    justifyContent: "flex-end",
+    color: "var(--fg-muted)",
+    fontSize: "0.84rem",
+} as const;
+
+const errorBoxStyle = {
+    margin: "0.6rem 0",
+    padding: "0.6rem 0.8rem",
+    border: "1px solid rgba(244, 63, 94, 0.3)",
+    background: "rgba(244, 63, 94, 0.07)",
+    color: "#fda4af",
+    borderRadius: "var(--radius-sm)",
+} as const;
+
+const noticeStyle = {
+    margin: "0.6rem 0",
+    padding: "0.6rem 0.8rem",
+    border: "1px dashed var(--border-strong)",
+    background: "var(--bg-elev)",
+    color: "var(--fg-muted)",
+    borderRadius: "var(--radius-sm)",
+    fontSize: "0.86rem",
+} as const;
+
+export function UsersPage() {
+    const {hasPermission} = useSession();
+    const [page, setPage] = useState(1);
+    const [items, setItems] = useState<AdminUser[]>([]);
+    const [total, setTotal] = useState(0);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [routeMissing, setRouteMissing] = useState(false);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError("");
+        setRouteMissing(false);
+        try {
+            const resp = await adminApi.listUsers(page, DEFAULT_PAGE_SIZE);
+            setItems(resp.items);
+            setTotal(resp.total);
+        } catch (cause) {
+            if (cause instanceof ApiClientError) {
+                if (cause.status === 404 || cause.status === 405) {
+                    setRouteMissing(true);
+                } else {
+                    setError(`${cause.code}: ${cause.message}`);
+                }
+            } else {
+                setError("Unable to load users.");
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [page]);
+
+    useEffect(() => {
+        if (!hasPermission("admin")) return;
+        void load();
+    }, [load, hasPermission]);
+
+    if (!hasPermission("admin")) {
+        // AdminLayout 已经渲染了"Access denied"，这里直接 null 即可。
+        return null;
+    }
+
+    const lastPage = Math.max(1, Math.ceil(total / DEFAULT_PAGE_SIZE));
+    const canPrev = page > 1;
+    const canNext = page < lastPage;
+
+    return (
+        <AdminLayout currentPath="/admin/users">
+            <section className="panel" style={sectionStyle} aria-labelledby="users-title">
+                <header style={headerStyle}>
+                    <span className="eyebrow">Admin · Users</span>
+                    <h2 id="users-title">Users &amp; roles</h2>
+                    <p style={{color: "var(--fg-muted)", margin: 0}}>
+                        Grant or revoke system roles. Every change is recorded in the
+                        audit log.
+                    </p>
+                </header>
+
+                {routeMissing ? (
+                    <div className="notice notice--error" role="alert" style={noticeStyle}>
+                        The <code>GET /admin/users</code> endpoint is not wired in the
+                        current API build. Ask the backend track to expose the route
+                        (handler: <code>apps/api/internal/admin/handlers/users.go</code>).
+                    </div>
+                ) : null}
+
+                {error && !routeMissing ? (
+                    <div role="alert" style={errorBoxStyle}>
+                        {error}{" "}
+                        <button
+                            type="button"
+                            className="btn--ghost"
+                            onClick={() => void load()}
+                        >
+                            Retry
+                        </button>
+                    </div>
+                ) : null}
+
+                <div role="table" aria-rowcount={total}>
+                    <div role="row" style={tableHeadStyle}>
+                        <span role="columnheader">User</span>
+                        <span role="columnheader">Wallets</span>
+                        <span role="columnheader">Roles</span>
+                        <span role="columnheader" style={{textAlign: "right"}}>
+                            Actions
+                        </span>
+                    </div>
+
+                    {loading ? (
+                        <ol style={listStyle} aria-busy="true" aria-label="Loading users">
+                            {[0, 1, 2].map((i) => (
+                                <li
+                                    key={i}
+                                    style={{
+                                        height: 56,
+                                        borderTop: "1px solid var(--border)",
+                                    }}
+                                />
+                            ))}
+                        </ol>
+                    ) : items.length === 0 && !routeMissing && !error ? (
+                        <div className="empty-state" style={noticeStyle}>
+                            <span>◇</span>
+                            <h3>No users yet</h3>
+                            <p>No accounts have signed in.</p>
+                        </div>
+                    ) : (
+                        <ol style={listStyle} aria-label="Users">
+                            {items.map((u) => (
+                                <UserRow
+                                    key={u.id}
+                                    user={u}
+                                    availableRoles={KNOWN_ROLES}
+                                    onChanged={() => void load()}
+                                />
+                            ))}
+                        </ol>
+                    )}
+                </div>
+
+                <footer style={pagerStyle} aria-label="Pagination">
+                    <span>
+                        Page {page} / {lastPage} · {total} total
+                    </span>
+                    <button
+                        type="button"
+                        className="btn--ghost"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={!canPrev || loading}
+                    >
+                        ← Prev
+                    </button>
+                    <button
+                        type="button"
+                        className="btn--ghost"
+                        onClick={() => setPage((p) => p + 1)}
+                        disabled={!canNext || loading}
+                    >
+                        Next →
+                    </button>
+                </footer>
+            </section>
+        </AdminLayout>
+    );
+}

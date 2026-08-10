@@ -69,6 +69,7 @@ func (h *OrderHandler) PostPurchaseIntent(c *httpkit.Context) {
 		IP:          c.ClientIP(),
 		UserAgent:   c.Request.UserAgent(),
 	})
+	httpkit.OrdersCreatedTotal.Inc()
 	c.JSON(http.StatusCreated, pi)
 }
 
