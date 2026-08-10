@@ -205,3 +205,49 @@ func TestSetReconcileSnapshot(t *testing.T) {
 		t.Fatalf("lastUnix = %d, want 1700000000", got)
 	}
 }
+
+// TestPartitionedCollector_ThreeSeries 验证 mustRegisterPartitionedCounter
+// 注册一个 metric，三条 (kind=any/http/ws) series 都能被 scrape 看到，
+// 且数值各自独立累计。这是修复「同一 fqName 不同 help 串被 Registry
+// 拒绝」的回归测试。
+func TestPartitionedCollector_ThreeSeries(t *testing.T) {
+	// 用一个 fresh registry 避免和已注册到全局 Registry 的指标冲突。
+	reg := prometheus.NewRegistry()
+	c := &partitionedCollector{
+		desc: prometheus.NewDesc(
+			"test_partitioned",
+			"test partitioned collector help",
+			[]string{"kind"},
+			nil,
+		),
+		dims: []prometheus.Labels{{"kind": "any"}, {"kind": "http"}, {"kind": "ws"}},
+		fns: []func() float64{
+			func() float64 { return 10 },
+			func() float64 { return 4 },
+			func() float64 { return 6 },
+		},
+		vt: prometheus.CounterValue,
+	}
+	reg.MustRegister(c)
+
+	srv := httptest.NewServer(promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	out := string(body)
+	wantLines := []string{
+		`test_partitioned{kind="any"} 10`,
+		`test_partitioned{kind="http"} 4`,
+		`test_partitioned{kind="ws"} 6`,
+	}
+	for _, line := range wantLines {
+		if !strings.Contains(out, line) {
+			t.Fatalf("missing %q in body:\n%s", line, out)
+		}
+	}
+}

@@ -166,6 +166,45 @@ export interface CourseWriteRequest {
     currency: string;
 }
 
+/**
+ * Curriculum write payload（F02-T12）。
+ *
+ * 顺序由数组下标决定；后端 ReplaceCurriculum 会落 position。
+ * mediaAssetId 可选——已 finalize 的 media_assets.id；未上传则 null。
+ */
+export interface CurriculumLessonInput {
+    title: string;
+    required: boolean;
+    durationSeconds: number;
+    mediaAssetId?: string | null;
+}
+
+export interface CurriculumChapterInput {
+    title: string;
+    lessons: CurriculumLessonInput[];
+}
+
+export interface CurriculumWriteRequest {
+    chapters: CurriculumChapterInput[];
+}
+
+/**
+ * 后端 PUT /teacher/courses/:id/curriculum 返回的 ETag 包装。
+ * 返回 {currentVersion, chapters}；chapters 字段保留服务端 position 排序。
+ */
+export interface CurriculumWriteResponse {
+    currentVersion: number;
+    chapters: Array<{
+        title: string;
+        lessons: Array<{
+            title: string;
+            required: boolean;
+            durationSeconds: number;
+            mediaAssetId?: string | null;
+        }>;
+    }>;
+}
+
 export function buildCourseQuery(input: {q?: string; priceMax?: number; before?: string; limit?: number}): string {
     const query = new URLSearchParams();
     if (input.q?.trim()) query.set("q", input.q.trim());
@@ -190,6 +229,13 @@ export const courseApi = {
     },
     submit(id: string): Promise<Course> {
         return apiClient.post<Course>(`/teacher/courses/${id}/submit`);
+    },
+    /**
+     * 替换课程章节/课时（PUT 整体替换；后端走乐观锁 If-Match）。
+     * 失败时 ApiClientError.code === 'STALE_VERSION' → UI 提示刷新。
+     */
+    replaceCurriculum(id: string, version: number, body: CurriculumWriteRequest): Promise<CurriculumWriteResponse> {
+        return apiClient.put<CurriculumWriteResponse>(`/teacher/courses/${id}/curriculum`, body, {headers: {"If-Match": String(version)}});
     },
 };
 

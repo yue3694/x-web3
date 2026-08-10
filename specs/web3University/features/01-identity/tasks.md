@@ -31,7 +31,7 @@
 - [x] `go test ./internal/auth/... ./internal/rbac/... ./internal/wallet/...` 全绿，覆盖率 ≥ 80%。
   - `auth` 82.2% / `rbac` 94.8% / `wallet` 84.8%（`auth/middleware_test.go` 9 例，`wallet/service_test.go` 13 例，`wallet/signature_test.go` 11 例，`wallet/nonce_test.go` 5 例）。
 - [x] 集成测试通过真实 PostgreSQL（`internal/integration/identity_test.go` + `wallet_bind_test.go`）；miniredis 替代 Redis。集成测试以 `TRUNCATE wallets` 隔离跨用例地址残留。
-- [ ] OpenAPI 通过 schema 校验；前端 client 由 generator 生成。**（F01-T08 契约已落 `packages/shared/openapi/auth.yaml`；generator 接入待 F02/F03 时统一处理）**
+- [x] OpenAPI 通过 schema 校验；前端 client 由 generator 生成。**（`scripts/check-openapi.mjs` 已落，js-yaml safeLoad + openapi 版本正则 + paths/components 类型校验 + 跨文件 `$ref` 解析到本地 yaml；通过 `pnpm openapi:check` 一键跑：7 个 yaml 全绿。generator 接入待 F02/F03 时统一处理）**
 - [x] AC-001 ~ AC-003 通过（`TestRepeatedPrivyLoginUpsertCreatesOneUser` 验证 AC-001；`TestSuspendedUserSessionIsRejectedAndDestroyed` 验证 AC-003 中段；RBAC matrix 覆盖 AC-003）。
 
 ## 风险

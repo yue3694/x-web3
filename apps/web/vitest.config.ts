@@ -3,7 +3,8 @@ import {defineConfig} from "vite";
 
 export default defineConfig({
     test: {
-        environment: "node",
+        // jsdom for *.tsx (rendering); pure helper *.ts still works in jsdom too.
+        environment: "jsdom",
         include: ["src/**/*.test.{ts,tsx}"],
         globals: false,
     },

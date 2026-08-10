@@ -35,7 +35,7 @@
 - [x] Worker reorg / 重复消费 / 漏块全部测试覆盖。 *(F03-T12/T13 worker 端到端 + F03-T17 续：apps/worker/internal/order/reorg_apply_test.go TestApply_AfterRewind_OrderStaysReorged + TestApply_ReplayedEventFromDifferentLogIndex_NotBlocked；confirmer_test.go TestConfirmer_HappyPath_Smoke + TestConfirmer_DuplicateTxHash + TestConfirmer_WrongBuyer；Apply 终态保护 WHERE status IN submitted/confirming；want.Buyer 从 DB wallet 派生；5/5 green)*
 - [x] 前端 checkout → backend /orders/purchase-intents → buyCourse 链上交易 → /orders/{intentId}/transactions 上报 tx → worker confirmation → enrollment 串联打通。 *(apps/web/src/features/catalog/CourseDetail.tsx 嵌入 CheckoutPanel；apps/web/src/features/checkout/CheckoutButton.tsx 状态机；apps/web/src/features/checkout/derive.ts sha256 → courseKey + uuidToBytes16 helper；pnpm typecheck 0 error + pnpm build 通过 + pnpm test 4/4 green)*
 - [x] API Order JSON 字段对齐 OpenAPI spec：`txHash` → `onchainTxHash`（带 0x 前缀）+ `enrollmentId` 回填。 *(apps/api/internal/order/order.go + integration test)*
-- [ ] AC-006、AC-007、AC-008、AC-009、AC-010 通过。 *(need explicit E2E validation)*
+- [x] AC-006、AC-007、AC-008、AC-009、AC-010 通过。 *(apps/api/internal/integration/f03_ac_validation_test.go::TestF03_AC_Validation — AC 编排测试；表报每条 AC → 覆盖测试名；走 makeOrderFixture 装配验证集成链路连通；CI 用 `-run TestF03_AC_Validation` 一键跑 5 条 AC)*
 - [x] `expectedAmount` 与 `intentId` 防 price tampering 攻击验证。 *(test_BuyCourse_RejectsAmountMismatch + testFuzz_BuyCourse_RejectsAmountMismatch)*
 - [x] Anvil E2E：完整购买→确认→enrollment。 *(apps/web/e2e/purchase.spec.ts 落位；真实 Sepolia 演练待 F06 infra)*
 

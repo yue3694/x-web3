@@ -247,18 +247,17 @@ func registerIndexerCounters(m IndexerMetrics) {
 		func() float64 { return float64(m.CheckpointSaveFail()) })
 
 	httpErr, wsErr := m.RPCErrors()
-	mustRegisterConstLabelCounter("worker_indexer_rpc_errors_total",
+	mustRegisterPartitionedCounter(
+		"worker_indexer_rpc_errors_total",
 		"RPC errors partitioned by transport (http/ws/any).",
-		func() float64 { return float64(httpErr + wsErr) },
-		"kind", "any")
-	mustRegisterConstLabelCounter("worker_indexer_rpc_errors_total",
-		"RPC errors via HTTP transport.",
-		func() float64 { return float64(httpErr) },
-		"kind", "http")
-	mustRegisterConstLabelCounter("worker_indexer_rpc_errors_total",
-		"RPC errors via WebSocket transport.",
-		func() float64 { return float64(wsErr) },
-		"kind", "ws")
+		"kind",
+		[]prometheus.Labels{{"kind": "any"}, {"kind": "http"}, {"kind": "ws"}},
+		[]func() float64{
+			func() float64 { return float64(httpErr + wsErr) },
+			func() float64 { return float64(httpErr) },
+			func() float64 { return float64(wsErr) },
+		},
+	)
 	mustRegisterConstLabelCounter("worker_indexer_rpc_swap_events_total",
 		"RPC swap events seen (used to detect primary failover).",
 		func() float64 { return float64(m.RPCSwapEvents()) })
@@ -440,8 +439,13 @@ func (l *lagScrape) cachedNext() (int64, bool) {
 // collector helpers
 // ---------------------------------------------------------------------------
 
-// mustRegisterConstLabelCounter 注册一个 CounterFunc 并附加 const labels
-// （labelNames → constLabels 必须一致）。
+// mustRegisterConstLabelCounter 注册一个 CounterFunc 并附加 const labels。
+//
+// labelKVs 全部作为 const labels（例如 "kind","http"），不导出 variable
+// labels：相同 metric 名 + 不同 const 组合会变成不同 series（这样才能
+// 在 worker_indexer_rpc_errors_total 下分 http/ws/any 三条 series）。
+// 注意：NewDesc 的 variableLabels 必须是 nil，否则同一 label 名既出现在
+// const 又出现在 variable 会被 Registry 拒绝（duplicate label names）。
 func mustRegisterConstLabelCounter(name, help string, fn func() float64, labelKVs ...string) {
 	if len(labelKVs)%2 != 0 {
 		panic("metrics: label kvs must be pairs")
@@ -450,18 +454,16 @@ func mustRegisterConstLabelCounter(name, help string, fn func() float64, labelKV
 	if _, ok := registered.Load(key); ok {
 		return
 	}
-	labelNames := make([]string, 0, len(labelKVs)/2)
 	constLabels := make(prometheus.Labels, len(labelKVs)/2)
 	for i := 0; i < len(labelKVs); i += 2 {
-		labelNames = append(labelNames, labelKVs[i])
 		constLabels[labelKVs[i]] = labelKVs[i+1]
 	}
 	c := &constLabelCollector{
 		desc: prometheus.NewDesc(
 			name,
 			help,
-			labelNames,
-			ConstLabelsWithout(labelKVs...),
+			nil, // variable labels：const-only 计数器一律不导出
+			constLabels,
 		),
 		value: fn,
 		vt:   prometheus.CounterValue,
@@ -470,23 +472,98 @@ func mustRegisterConstLabelCounter(name, help string, fn func() float64, labelKV
 	registered.Store(key, struct{}{})
 }
 
+// mustRegisterPartitionedCounter 注册一个由多个 fn 共享 fqName 的多 series
+// 计数器，每个 (kind → fn) 组成一条 series。最终 desc 帮助字符串统一，避免
+// Prometheus 因「same fqName with different help」拒绝注册。
+//
+// 用法示例（worker_indexer_rpc_errors_total 分 http/ws/any 三 series）：
+//
+//	mustRegisterPartitionedCounter(
+//	    "worker_indexer_rpc_errors_total",
+//	    "RPC errors partitioned by transport (http/ws/any).",
+//	    "kind",
+//	    []prometheus.Labels{
+//	        {"kind": "any"},
+//	        {"kind": "http"},
+//	        {"kind": "ws"},
+//	    },
+//	    []func() float64{httpErr+wsErr, httpErr, wsErr},
+//	)
+func mustRegisterPartitionedCounter(name, help, dim string, dims []prometheus.Labels, fns []func() float64) {
+	if len(dims) != len(fns) {
+		panic("metrics: dims and fns length mismatch")
+	}
+	key := name + "|" + dim + "|n=" + itoa(len(dims))
+	if _, ok := registered.Load(key); ok {
+		return
+	}
+	c := &partitionedCollector{
+		desc:  prometheus.NewDesc(name, help, []string{dim}, nil),
+		dims:  dims,
+		fns:   fns,
+		vt:    prometheus.CounterValue,
+	}
+	Registry.MustRegister(c)
+	registered.Store(key, struct{}{})
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b [20]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(b[i:])
+}
+
+// partitionedCollector 在一次 scrape 中按 dims/fns 多发射（multi-emit）若干
+// ConstMetric。Describe 仍只发一次 desc，Collect 调每个 fn 取最新值并逐条
+// 发射——保证同名 metric 下不同 (kind=…) 值独立累计。
+type partitionedCollector struct {
+	desc *prometheus.Desc
+	dims []prometheus.Labels
+	fns  []func() float64
+	vt   prometheus.ValueType
+}
+
+func (c *partitionedCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.desc
+}
+
+func (c *partitionedCollector) Collect(ch chan<- prometheus.Metric) {
+	for i, dim := range c.dims {
+		ch <- prometheus.MustNewConstMetric(
+			c.desc,
+			c.vt,
+			c.fns[i](),
+			singleLabelValue(dim),
+		)
+	}
+}
+
+// singleLabelValue 取 dim 中唯一一对 KV 的 value。调用方约定 dims 元素
+// 只含一个 variable label（如 {"kind":"http"}）。
+func singleLabelValue(dim prometheus.Labels) string {
+	if len(dim) == 0 {
+		return ""
+	}
+	for _, v := range dim {
+		return v
+	}
+	return ""
+}
+
 func mustRegisterGaugeFunc(name, help string, fn func() float64) {
 	if _, ok := registered.Load(name); ok {
 		return
 	}
 	Registry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: name, Help: help}, fn))
 	registered.Store(name, struct{}{})
-}
-
-// ConstLabelsWithout 拆出 (labelNames, constLabels) → 实际只保留 constLabels 子集。
-// 上面 mustRegisterConstLabelCounter 已经把每对的 K / V 拆成两个 map，
-// 这里复用 helper。
-func ConstLabelsWithout(labelKVs ...string) prometheus.Labels {
-	l := make(prometheus.Labels, len(labelKVs)/2)
-	for i := 0; i < len(labelKVs); i += 2 {
-		l[labelKVs[i]] = labelKVs[i+1]
-	}
-	return l
 }
 
 // flatKVs 把 "k1","v1","k2","v2" 拼成 "k1=v1,k2=v2" 用作 dedup key。

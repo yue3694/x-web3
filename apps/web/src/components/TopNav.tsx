@@ -26,6 +26,8 @@ interface NavLink {
 
 const LINKS: NavLink[] = [
     {href: "#catalog", label: "Catalog"},
+    {href: "#swap", label: "Swap"},
+    {href: "#account", label: "Account"},
     {href: "#protocol", label: "Protocol"},
     {href: "#contact", label: "Contact"},
 ];
