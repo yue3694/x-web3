@@ -455,3 +455,174 @@ func TestListEnrollments_LimitClamp(t *testing.T) {
 		t.Fatalf("ListEnrollments(999): %v", err)
 	}
 }
+
+// seedCertificateRow 落一组 (enrollment, completion, certificate, job) 元数据；
+// 返回 certificate.id (UUID) — 用于 ListCertificates 联合校验。
+//
+// 调用方负责先 bootstrapQueriesSchema + seed user/course。
+func seedCertificateRow(t *testing.T, pool *pgxpool.Pool, userID, courseID, certVersion uuid.UUID) (certRowID, jobID uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	enrollmentID := uuid.New()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO enrollments(id, user_id, course_id, source) VALUES ($1, $2, $3, 'seed')`,
+		enrollmentID, userID, courseID,
+	); err != nil {
+		t.Fatalf("enroll: %v", err)
+	}
+	completionID := uuid.New()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO course_completions(id, enrollment_id, rule_version) VALUES ($1, $2, 1)`,
+		completionID, enrollmentID,
+	); err != nil {
+		t.Fatalf("completion: %v", err)
+	}
+	certRowID = uuid.New()
+	if _, err := pool.Exec(ctx, `
+INSERT INTO certificates(id, completion_id, user_id, course_id, cert_version,
+                         certificate_id, recipient_wallet, metadata_uri, metadata_sha256,
+                         chain_id, status)
+VALUES ($1, $2, $3, $4, $5, 12345, '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+        'ipfs://x', 'deadbeef', 11155111, 'pending')`,
+		certRowID, completionID, userID, courseID, certVersion,
+	); err != nil {
+		t.Fatalf("certificate: %v", err)
+	}
+	jobID = uuid.New()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO certificate_jobs(id, certificate_id, status, attempt) VALUES ($1, $2, 'confirmed', 1)`,
+		jobID, certRowID,
+	); err != nil {
+		t.Fatalf("job: %v", err)
+	}
+	return certRowID, jobID
+}
+
+// TestListCertificates_OnlyCurrentVersion 验证 ListCertificates 不会因
+// courses.current_version 已经 bump 而丢掉旧 cert_version 的证书行。
+//
+// 场景：课程 A 在 v1 时签了一张 cert_version=1 的证书；老师后来把课程升级到
+// v2（current_version=2），学员重新完成再次签出 cert_version=2。前端
+// /me/certificates 必须**两条都看到**——这是「证书=履历」的语义。
+//
+// 关键不变量：ListCertificates 的 JOIN 用 `certificates.id = certificate_jobs.certificate_id`
+// + `certificates.user_id`，并不把 cert_version 与 courses.current_version 对齐，
+// 因此旧版本证书不应被静默丢弃。
+func TestListCertificates_OnlyCurrentVersion(t *testing.T) {
+	pool := skipIfNoPGQueries(t)
+	bootstrapQueriesSchema(t, pool)
+	ctx := context.Background()
+
+	userID := uuid.New()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO users(id, privy_user_id, status) VALUES ($1, $2, 'active')`,
+		userID, "did:u-"+userID.String(),
+	); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	// 课程 + 当前版本为 2（一次升级动作）
+	courseID := seedCourseWithLessons(t, pool, userID, 1)
+	var v1ID uuid.UUID
+	if err := pool.QueryRow(ctx,
+		`SELECT id FROM course_versions WHERE course_id=$1 AND version=1`, courseID,
+	).Scan(&v1ID); err != nil {
+		t.Fatalf("scan v1: %v", err)
+	}
+	v2ID := uuid.New()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO course_versions(id, course_id, version) VALUES ($1, $2, 2)`,
+		v2ID, courseID,
+	); err != nil {
+		t.Fatalf("insert v2: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE courses SET current_version = 2 WHERE id = $1`, courseID,
+	); err != nil {
+		t.Fatalf("bump current_version: %v", err)
+	}
+
+	// 旧版证书（cert_version = 1）
+	certV1, _ := seedCertificateRow(t, pool, userID, courseID, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
+
+	// 新版证书（cert_version = 2）
+	certV2, _ := seedCertificateRow(t, pool, userID, courseID, uuid.MustParse("00000000-0000-0000-0000-000000000002"))
+
+	svc := &Service{pool: pool}
+	items, err := svc.ListCertificates(ctx, userID, 50)
+	if err != nil {
+		t.Fatalf("ListCertificates: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 certs (v1+v2), got %d", len(items))
+	}
+
+	gotV1, gotV2 := false, false
+	for _, it := range items {
+		if it.CourseID != courseID {
+			continue
+		}
+		// onchain_cert_id 是 numeric 的字符串形式；用以唯一标识行
+		switch it.CertificateID {
+		case certV1:
+			gotV1 = true
+		case certV2:
+			gotV2 = true
+		}
+	}
+	if !gotV1 {
+		t.Errorf("old cert_version=1 was dropped from ListCertificates (cert_row_id=%s)", certV1)
+	}
+	if !gotV2 {
+		t.Errorf("new cert_version=2 missing from ListCertificates (cert_row_id=%s)", certV2)
+	}
+}
+
+// TestListCertificates_SkipsOtherUsers 确认 WHERE user_id 过滤有效——
+// 别的 user 的证书不应进入当前 user 的结果（最小隔离回归）。
+func TestListCertificates_SkipsOtherUsers(t *testing.T) {
+	pool := skipIfNoPGQueries(t)
+	bootstrapQueriesSchema(t, pool)
+	ctx := context.Background()
+
+	a := uuid.New()
+	b := uuid.New()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO users(id, privy_user_id, status) VALUES ($1,$2,'active'),($3,$4,'active')`,
+		a, "did:a-"+a.String(), b, "did:b-"+b.String(),
+	); err != nil {
+		t.Fatalf("insert users: %v", err)
+	}
+
+	// user A：自家课程 → 1 张证书
+	cA := seedCourseWithLessons(t, pool, a, 1)
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO enrollments(user_id, course_id, source) VALUES ($1,$2,'seed')`, a, cA,
+	); err != nil {
+		t.Fatalf("enroll A: %v", err)
+	}
+	certA, _ := seedCertificateRow(t, pool, a, cA, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
+
+	// user B：另一张证书，**不应**出现在 A 的列表里
+	cB := seedCourseWithLessons(t, pool, b, 1)
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO enrollments(user_id, course_id, source) VALUES ($1,$2,'seed')`, b, cB,
+	); err != nil {
+		t.Fatalf("enroll B: %v", err)
+	}
+	certB, _ := seedCertificateRow(t, pool, b, cB, uuid.MustParse("00000000-0000-0000-0000-000000000002"))
+
+	svc := &Service{pool: pool}
+	items, err := svc.ListCertificates(ctx, a, 50)
+	if err != nil {
+		t.Fatalf("ListCertificates: %v", err)
+	}
+	for _, it := range items {
+		if it.CertificateID == certB {
+			t.Errorf("user B cert %s leaked into user A's list", certB)
+		}
+		if it.CertificateID != certA && it.UserID == a {
+			t.Errorf("unexpected cert %s for user A", it.CertificateID)
+		}
+	}
+}

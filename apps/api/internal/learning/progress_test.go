@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -265,5 +266,173 @@ func TestReportProgress_InvalidPct(t *testing.T) {
 	}
 	if _, err := svc.ReportProgress(context.Background(), userID, lessonID, 101); err == nil {
 		t.Fatal("expected error for 101")
+	}
+}
+
+// TestProgress_FirstWrite 用例任务里明确指定的「50% 从 0%」首次上报：
+// lesson_progress 在调用前为空 → 写完之后恰好 1 行、pct==50。
+func TestProgress_FirstWrite(t *testing.T) {
+	pool := skipIfNoPG(t)
+	bootstrapProgressSchema(t, pool)
+	userID, lessonID := seedLesson(t, pool, true)
+
+	// 前置：表里没有任何 lesson_progress 行
+	var preCount int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM lesson_progress WHERE user_id = $1 AND lesson_id = $2`,
+		userID, lessonID,
+	).Scan(&preCount); err != nil {
+		t.Fatalf("pre-check: %v", err)
+	}
+	if preCount != 0 {
+		t.Fatalf("expected 0 rows before first write, got %d", preCount)
+	}
+
+	svc := &Service{pool: pool}
+	got, err := svc.ReportProgress(context.Background(), userID, lessonID, 50)
+	if err != nil {
+		t.Fatalf("ReportProgress(50): %v", err)
+	}
+	if got != 50 {
+		t.Errorf("returned pct = %d, want 50", got)
+	}
+
+	// 表里恰好 1 行 + pct==50
+	var (
+		rows int
+		pct  int
+	)
+	if err := pool.QueryRow(context.Background(),
+		`SELECT COUNT(*), COALESCE(MAX(pct), 0) FROM lesson_progress
+		  WHERE user_id = $1 AND lesson_id = $2`,
+		userID, lessonID,
+	).Scan(&rows, &pct); err != nil {
+		t.Fatalf("post-check: %v", err)
+	}
+	if rows != 1 {
+		t.Errorf("expected 1 row after first write, got %d", rows)
+	}
+	if pct != 50 {
+		t.Errorf("stored pct = %d, want 50", pct)
+	}
+}
+
+// TestProgress_FirstWrite_ThenHigher 首次写 50% → 紧接着上报 80% 成功（递增路径）。
+func TestProgress_FirstWrite_ThenHigher(t *testing.T) {
+	pool := skipIfNoPG(t)
+	bootstrapProgressSchema(t, pool)
+	userID, lessonID := seedLesson(t, pool, true)
+
+	svc := &Service{pool: pool}
+	if _, err := svc.ReportProgress(context.Background(), userID, lessonID, 50); err != nil {
+		t.Fatalf("first write 50: %v", err)
+	}
+	got, err := svc.ReportProgress(context.Background(), userID, lessonID, 80)
+	if err != nil {
+		t.Fatalf("second write 80: %v", err)
+	}
+	if got != 80 {
+		t.Errorf("got = %d, want 80", got)
+	}
+	var pct int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT pct FROM lesson_progress WHERE user_id = $1 AND lesson_id = $2`,
+		userID, lessonID,
+	).Scan(&pct); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if pct != 80 {
+		t.Errorf("stored pct = %d, want 80", pct)
+	}
+}
+
+// TestProgress_RegressionRejected 任务里明确指定的「倒退拒绝」：
+// 两次显式断言——错误哨兵 + 数据库里 pct 不变。
+func TestProgress_RegressionRejected(t *testing.T) {
+	pool := skipIfNoPG(t)
+	bootstrapProgressSchema(t, pool)
+	userID, lessonID := seedLesson(t, pool, true)
+
+	svc := &Service{pool: pool}
+	if _, err := svc.ReportProgress(context.Background(), userID, lessonID, 80); err != nil {
+		t.Fatalf("seed write 80: %v", err)
+	}
+
+	// 倒退 → 必须 ErrProgressRegression
+	got, err := svc.ReportProgress(context.Background(), userID, lessonID, 50)
+	if !errors.Is(err, ErrProgressRegression) {
+		t.Fatalf("expected ErrProgressRegression, got %v (pct=%d)", err, got)
+	}
+	// service 约定：回归时返回 current pct（便于前端回显最新值）
+	if got != 80 {
+		t.Errorf("regression returned pct = %d, want 80 (current)", got)
+	}
+
+	// 数据库里 pct 仍为 80（rollback 等价语义）
+	var pct int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT pct FROM lesson_progress WHERE user_id = $1 AND lesson_id = $2`,
+		userID, lessonID,
+	).Scan(&pct); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if pct != 80 {
+		t.Errorf("pct after regression = %d, want 80 (unchanged)", pct)
+	}
+}
+
+// TestProgress_IdempotentSameValue 任务里明确指定的「同值幂等」：
+// 第二次写同 pct → 200 (无报错) + pct 不变 + updated_at 刷新（轻量 touch）。
+func TestProgress_IdempotentSameValue(t *testing.T) {
+	pool := skipIfNoPG(t)
+	bootstrapProgressSchema(t, pool)
+	userID, lessonID := seedLesson(t, pool, true)
+
+	svc := &Service{pool: pool}
+	if _, err := svc.ReportProgress(context.Background(), userID, lessonID, 50); err != nil {
+		t.Fatalf("first write 50: %v", err)
+	}
+
+	// 取第一次写后的 updated_at
+	var firstUpdatedAt time.Time
+	if err := pool.QueryRow(context.Background(),
+		`SELECT updated_at FROM lesson_progress WHERE user_id = $1 AND lesson_id = $2`,
+		userID, lessonID,
+	).Scan(&firstUpdatedAt); err != nil {
+		t.Fatalf("select first updated_at: %v", err)
+	}
+
+	// 睡 5ms 让时间戳自然前进（now() 通常 μs 精度，等 1 tick 一般足够）
+	time.Sleep(5 * time.Millisecond)
+
+	got, err := svc.ReportProgress(context.Background(), userID, lessonID, 50)
+	if err != nil {
+		t.Fatalf("idempotent same-value write: %v", err)
+	}
+	if got != 50 {
+		t.Errorf("got = %d, want 50 (idempotent)", got)
+	}
+
+	var (
+		rows      int
+		pct       int
+		updatedAt time.Time
+	)
+	if err := pool.QueryRow(context.Background(),
+		`SELECT COUNT(*), MAX(pct), MAX(updated_at) FROM lesson_progress
+		  WHERE user_id = $1 AND lesson_id = $2`,
+		userID, lessonID,
+	).Scan(&rows, &pct, &updatedAt); err != nil {
+		t.Fatalf("post-check: %v", err)
+	}
+	if rows != 1 {
+		t.Errorf("expected 1 row, got %d", rows)
+	}
+	if pct != 50 {
+		t.Errorf("pct = %d, want 50", pct)
+	}
+	if !updatedAt.After(firstUpdatedAt) {
+		t.Errorf("updated_at must advance on same-value write (pre=%v post=%v)",
+			firstUpdatedAt, updatedAt)
 	}
 }

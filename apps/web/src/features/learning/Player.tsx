@@ -20,6 +20,8 @@ import {ApiClientError} from "@/api/client";
 import {learningApi, type PlaybackCredential, type ProgressReport} from "@/api/types";
 import {useSession} from "@/auth/SessionContext";
 
+import {ProgressReporter, useProgressReporter} from "./ProgressReporter";
+
 /** 进度上报节流间隔（毫秒）—— 与 F04 design.md 一致。 */
 const PROGRESS_THROTTLE_MS = 5_000;
 
@@ -29,6 +31,8 @@ const REFRESH_LEAD_MS = 30_000;
 export interface PlayerProps {
     /** 课时 ID（UUID，由上游 CourseDetail 传入） */
     lessonId: string;
+    /** 课程 ID（用于 "Mark as complete" 跳转；缺省时复用 lessonId） */
+    courseId?: string;
     /** 课时标题（仅展示） */
     title?: string;
     /** 自定义类 */
@@ -45,7 +49,7 @@ function toBps(positionSeconds: number, durationSeconds: number): number {
     return Math.floor(ratio * 10_000);
 }
 
-export function Player({lessonId, title, className, onProgress}: PlayerProps) {
+export function Player({lessonId, courseId, title, className, onProgress}: PlayerProps) {
     const {profile, loading: sessionLoading} = useSession();
     const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -169,6 +173,14 @@ export function Player({lessonId, title, className, onProgress}: PlayerProps) {
 
     const videoSrc = useMemo(() => credential?.url ?? "", [credential]);
 
+    // 5s 兜底轮询上报 + 100% 完成按钮（与 Player.onTimeUpdate 节流互补）
+    const progressHandle = useProgressReporter({
+        lessonId,
+        courseId: courseId ?? lessonId,
+        videoRef,
+        userId: profile?.id ?? null,
+    });
+
     return (
         <section
             className={`learning-player panel${className ? ` ${className}` : ""}`}
@@ -232,6 +244,14 @@ export function Player({lessonId, title, className, onProgress}: PlayerProps) {
                     </span>
                 ) : null}
             </footer>
+
+            {state === "ready" && profile ? (
+                <ProgressReporter
+                    handle={progressHandle}
+                    courseId={courseId ?? lessonId}
+                    courseTitle={title}
+                />
+            ) : null}
         </section>
     );
 }

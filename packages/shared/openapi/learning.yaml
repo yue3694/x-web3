@@ -1,0 +1,433 @@
+openapi: 3.1.0
+info:
+    title: x-web3 University — Learning API
+    version: 0.1.0
+    description: |
+        学习进度上报 / 课程完成 / 报名 / 播放凭证 API（F04）。
+        路径与字段命名与以下实现文件严格对齐：
+          - `apps/api/internal/handlers/learning.go`（lesson 路由）
+          - `apps/api/internal/handlers/certificate.go`（me/* 与 courses/{id}/complete）
+          - `apps/api/internal/learning/learning.go`（PlaybackCredential）
+          - `apps/api/internal/learning/queries.go`（EnrollmentItem）
+          - `apps/api/internal/learning/progress.go`（pct 0..100 整数）
+
+        鉴权：会话 cookie（与 `auth.yaml` 一致）。
+servers:
+    - url: https://api.x-web3.example.com/api/v1
+      description: Production
+    - url: http://localhost:8080/api/v1
+      description: Local dev
+tags:
+    - name: learning
+      description: 播放凭证 + 课时进度上报
+    - name: enrollment
+      description: 我的报名 / 课程完成
+paths:
+    /lessons/{id}/playback:
+        get:
+            tags: [learning]
+            operationId: issueLessonPlayback
+            summary: 已购买学生播放凭证（TTL ≤ 5 min）
+            description: |
+                鉴权：必须已 enrollment，否则返回 `NOT_ENROLLED`。
+                媒体未 ready 时返回 `MEDIA_NOT_READY`。
+                签发的 URL 是短期 presigned URL，TTL 走 `learning.maxTTL`（≤ 5 分钟）。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlaybackCredential'
+                '400':
+                    description: lesson id 无法解析为 UUID（`BAD_REQUEST`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    description: 未 enrollment 或 lesson 不存在（`NOT_ENROLLED`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '404':
+                    description: lesson 不存在（`NOT_FOUND`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '409':
+                    description: 媒体未 ready（`MEDIA_NOT_READY`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+    /teacher/lessons/{id}/preview:
+        get:
+            tags: [learning]
+            operationId: previewLessonAsTeacher
+            summary: 教师预览 draft lesson（purpose=preview）
+            description: |
+                鉴权：必须为 lesson 所属课程的 teacher，否则 `NOT_ENROLLED`。
+                与 `/lessons/{id}/playback` 共用 `PlaybackCredential`，
+                仅 `purpose` 字段恒为 `preview`。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlaybackCredential'
+                '400':
+                    $ref: './errors.yaml#/components/responses/BadRequest'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    description: 不是 lesson 所属课程的作者（`NOT_ENROLLED`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '404':
+                    $ref: './errors.yaml#/components/responses/NotFound'
+                '409':
+                    description: 媒体未 ready（`MEDIA_NOT_READY`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+    /lessons/{id}/progress:
+        post:
+            tags: [learning]
+            operationId: reportLessonProgress
+            summary: 上报课时进度（pct 整数 0..100，单调推进）
+            description: |
+                与 `apps/api/internal/learning/progress.go` 的 `ReportProgress` 一一对应：
+                  - pct 必须 ∈ [0, 100]；超界返回 `BAD_REQUEST`；
+                  - 同一 (user, lesson) 上新值 < 旧值 → `PROGRESS_REGRESSION`（409）；
+                  - 新值 == 旧值 → 幂等返回相同 pct，不变更业务状态；
+                  - 必须已 enrollment，否则 `NOT_ENROLLED`（403）。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ProgressReportRequest'
+            responses:
+                '200':
+                    description: |
+                        OK；返回的 `pct` 即服务端最新值（命中幂等也返回该值）。
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProgressReportResponse'
+                '400':
+                    description: |
+                        lesson id 非法 / pct 越界（`BAD_REQUEST`）。
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    description: 未 enrollment（`NOT_ENROLLED`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '404':
+                    description: lesson 不存在（`NOT_FOUND`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '409':
+                    description: 进度倒退（`PROGRESS_REGRESSION`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+    /me/enrollments:
+        get:
+            tags: [enrollment]
+            operationId: listMyEnrollments
+            summary: 当前用户的报名列表（含每门课的进度统计）
+            description: |
+                与 `apps/api/internal/learning/queries.go` 的 `EnrollmentItem` 严格对齐。
+                排序：`enrolledAt DESC`；分页走 `limit`（默认 50，上限 50）。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: query
+                  name: limit
+                  schema:
+                      type: integer
+                      minimum: 1
+                      maximum: 50
+                      default: 50
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EnrollmentListResponse'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+    /courses/{id}/complete:
+        post:
+            tags: [enrollment]
+            operationId: markCourseComplete
+            summary: 评估完课并原子地写完课 + 证书记录
+            description: |
+                与 `apps/api/internal/certificate/completion.go` 的 `CompleteCourse` 一一对应。
+                必须已 enrollment；required lessons 全部 pct=100 才会创建 course_completions
+                + certificates + certificate_jobs；否则返回 `BAD_REQUEST`（422）。
+                同一 (user, course, rule_version) 重复调用幂等返回相同 CompletionRecord。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+            responses:
+                '200':
+                    description: |
+                        OK；已存在完课记录或新建成功均返回当前 CompletionRecord。
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CompletionRecord'
+                '400':
+                    description: course id 非法（`BAD_REQUEST`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    description: 未 enrollment / 未绑钱包（`NOT_ENROLLED`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '404':
+                    description: 课程不存在（`NOT_FOUND`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '422':
+                    description: 进度未达 100%（`BAD_REQUEST` / partial completion）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+components:
+    securitySchemes:
+        sessionCookie:
+            type: apiKey
+            in: cookie
+            name: xweb3_sid
+    schemas:
+        PlaybackCredential:
+            type: object
+            description: |
+                字段对齐 `apps/api/internal/learning.Credential`。
+                `purpose=preview` 仅教师预览自己 draft 时出现（`GET /teacher/lessons/{id}/preview`）。
+            required: [lessonId, url, expiresAt, purpose]
+            properties:
+                lessonId:
+                    type: string
+                    format: uuid
+                url:
+                    type: string
+                    format: uri
+                    description: |
+                        短期 presigned URL（TTL ≤ 5 分钟，由 `learning.maxTTL` 钳制）。
+                expiresAt:
+                    type: string
+                    format: date-time
+                purpose:
+                    type: string
+                    enum: [playback, preview]
+        ProgressReportRequest:
+            type: object
+            description: |
+                与 `apps/api/internal/handlers.learning.go` 的 `progressRequest` 严格对齐。
+                `pct` 是服务端权威值（整数 0..100），客户端不可绕过该约束。
+            required: [pct]
+            properties:
+                pct:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+                    description: 课时进度（整数 0..100；服务端会与当前值比较，回退 → 409）
+        ProgressReportResponse:
+            type: object
+            description: |
+                与 handler `PostProgress` 的 JSON 响应形状严格对齐（`gin.H{"lessonId": id, "pct": got}`）。
+            required: [lessonId, pct]
+            properties:
+                lessonId:
+                    type: string
+                    format: uuid
+                pct:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+        EnrollmentItem:
+            type: object
+            description: |
+                字段对齐 `apps/api/internal/learning.EnrollmentItem`。
+                `completedAt` 仅在 `hasCompletion=true` 时存在；前端必须按 `hasCompletion` 判定。
+            required:
+                - enrollmentId
+                - courseId
+                - courseSlug
+                - courseTitle
+                - enrolledAt
+                - requiredLessonsTotal
+                - completedLessonsTotal
+                - completionPct
+                - hasCompletion
+            properties:
+                enrollmentId:
+                    type: string
+                    format: uuid
+                courseId:
+                    type: string
+                    format: uuid
+                courseSlug:
+                    type: string
+                courseTitle:
+                    type: string
+                enrolledAt:
+                    type: string
+                    format: date-time
+                requiredLessonsTotal:
+                    type: integer
+                    minimum: 0
+                completedLessonsTotal:
+                    type: integer
+                    minimum: 0
+                completionPct:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+                hasCompletion:
+                    type: boolean
+                completedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+        EnrollmentListResponse:
+            type: object
+            required: [items]
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EnrollmentItem'
+        CompletionRecord:
+            type: object
+            description: |
+                字段对齐 `apps/api/internal/certificate.CompletionRecord`。
+                `certificateId` 是 certificates 表的 UUID（行存在时才有值，omitempty）；
+                `onchainCertId` 是 uint256 decimal string（与链上 `bytes32 / uint256` 一致）。
+            required:
+                - id
+                - enrollmentId
+                - userId
+                - courseId
+                - ruleVersion
+                - completedAt
+                - completedLessonsCount
+                - totalLessonsCount
+                - onchainCertId
+                - status
+                - recipientWallet
+                - metadataUri
+                - metadataSha256
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                enrollmentId:
+                    type: string
+                    format: uuid
+                userId:
+                    type: string
+                    format: uuid
+                courseId:
+                    type: string
+                    format: uuid
+                ruleVersion:
+                    type: integer
+                    minimum: 1
+                completedAt:
+                    type: string
+                    format: date-time
+                completedLessonsCount:
+                    type: integer
+                    minimum: 0
+                totalLessonsCount:
+                    type: integer
+                    minimum: 0
+                certificateId:
+                    type: string
+                    format: uuid
+                    nullable: true
+                    description: 关联的 certificates.id（存在时非空，否则 omitempty）
+                onchainCertId:
+                    type: string
+                    description: 链上 uint256 decimal string（与 `bytes32 / uint256` 对齐）
+                status:
+                    type: string
+                    enum: [pending, minting, confirmed, failed, dead]
+                    description: certificate_jobs 当前状态
+                recipientWallet:
+                    type: string
+                    pattern: '^0x[a-fA-F0-9]{40}$'
+                metadataUri:
+                    type: string
+                    format: uri
+                metadataSha256:
+                    type: string
+                    description: |
+                        metadata 内容寻址 sha256（hex，0x 前缀可选；与 `certificates.metadata_sha256` 一致）。
