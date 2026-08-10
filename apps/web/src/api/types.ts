@@ -156,6 +156,7 @@ export interface CoursePage {
 export interface CourseDetail {
     course: Course;
     chapters: Array<{id: string; position: number; title: string; lessons: Array<{id: string; position: number; title: string; required: boolean; durationSeconds: number}>}>;
+    enrolled: boolean;
 }
 
 export interface CourseWriteRequest {

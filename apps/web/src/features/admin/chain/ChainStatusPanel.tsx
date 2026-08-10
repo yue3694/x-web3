@@ -16,7 +16,6 @@ import {useCallback, useEffect, useState} from "react";
 import {useAccount} from "wagmi";
 
 import {ApiClientError} from "@/api/client";
-import {AdminLayout} from "@/features/admin/AdminLayout";
 import {adminApi} from "@/features/admin/adminApi";
 import type {ChainSyncStatus} from "@/features/admin/adminTypes";
 
@@ -31,7 +30,8 @@ const KNOWN_CHAINS: ReadonlyArray<{id: number; label: string}> = [
 
 type LagLevel = "ok" | "warn" | "danger";
 
-function lagLevel(seconds: number): LagLevel {
+function lagLevel(seconds: number | null): LagLevel {
+    if (seconds === null) return "warn";
     if (seconds < 30) return "ok";
     if (seconds <= 300) return "warn";
     return "danger";
@@ -43,7 +43,8 @@ function lagColor(level: LagLevel): string {
     return "var(--accent-rose)";
 }
 
-function formatTimestamp(iso: string): string {
+function formatTimestamp(iso: string | null): string {
+    if (!iso) return "Unavailable";
     const d = new Date(iso);
     if (Number.isNaN(d.valueOf())) return iso;
     return `${new Intl.DateTimeFormat("en-US", {
@@ -150,7 +151,6 @@ export function ChainStatusPanel() {
             setChainId(wagmiChainId);
         }
         // 只在 wagmi chain 改变时同步一次，避免覆盖用户手动选择。
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [wagmiChainId]);
 
     useEffect(() => {
@@ -168,10 +168,9 @@ export function ChainStatusPanel() {
     const level: LagLevel = status ? lagLevel(status.lagSeconds) : "ok";
     const fillColor = lagColor(level);
     // 进度：把 0..600s 映射到 0..100%，封顶 100。
-    const fillPct = status ? Math.min(100, (status.lagSeconds / 600) * 100) : 0;
+    const fillPct = status?.lagSeconds != null ? Math.min(100, (status.lagSeconds / 600) * 100) : 0;
 
     return (
-        <AdminLayout currentPath="/admin/chain">
             <section className="panel" style={sectionStyle} aria-labelledby="chain-title">
                 <header style={headerStyle}>
                     <span className="eyebrow">Admin · Chain</span>
@@ -244,7 +243,7 @@ export function ChainStatusPanel() {
                     <article style={tileBase} aria-label="Lag seconds">
                         <div style={tileLabelStyle}>lagSeconds</div>
                         <div style={{...tileValueStyle, color: fillColor}}>
-                            {status ? `${status.lagSeconds.toFixed(0)}s` : "—"}
+                            {status?.lagSeconds != null ? `${status.lagSeconds.toFixed(0)}s` : "—"}
                         </div>
                         <div style={gaugeTrackStyle} aria-hidden="true">
                             <div
@@ -278,6 +277,7 @@ export function ChainStatusPanel() {
                     </article>
                 </div>
             </section>
-        </AdminLayout>
     );
 }
+
+export default ChainStatusPanel;

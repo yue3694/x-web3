@@ -5,6 +5,8 @@
  * 底部 bar 放状态/版权/外部链接。
  */
 
+import {Link} from "react-router-dom";
+
 interface FooterColumn {
     title: string;
     links: Array<{label: string; href: string; external?: boolean}>;
@@ -14,9 +16,9 @@ const COLUMNS: FooterColumn[] = [
     {
         title: "Product",
         links: [
-            {label: "Course catalog", href: "#catalog"},
-            {label: "Teacher studio", href: "#studio"},
-            {label: "Credential receipts", href: "#protocol"},
+            {label: "Course catalog", href: "/courses"},
+            {label: "Teacher studio", href: "/studio"},
+            {label: "Credential receipts", href: "/account/certificates"},
         ],
     },
     {
@@ -30,9 +32,9 @@ const COLUMNS: FooterColumn[] = [
     {
         title: "Tech",
         links: [
-            {label: "React + wagmi v2", href: "#top"},
-            {label: "Solidity 0.8.24", href: "#top"},
-            {label: "OpenZeppelin", href: "#top"},
+            {label: "React + wagmi v2", href: "/"},
+            {label: "Solidity 0.8.24", href: "/"},
+            {label: "OpenZeppelin", href: "/"},
         ],
     },
 ];
@@ -56,14 +58,7 @@ export function Footer() {
                         <ul>
                             {column.links.map((link) => (
                                 <li key={link.label}>
-                                    <a
-                                        href={link.href}
-                                        target={link.external ? "_blank" : undefined}
-                                        rel={link.external ? "noreferrer" : undefined}
-                                    >
-                                        {link.label}
-                                        {link.external ? <span aria-hidden="true"> ↗</span> : null}
-                                    </a>
+                                    {link.external ? <a href={link.href} target="_blank" rel="noreferrer">{link.label}<span aria-hidden="true"> ↗</span></a> : <Link to={link.href}>{link.label}</Link>}
                                 </li>
                             ))}
                         </ul>

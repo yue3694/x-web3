@@ -17,7 +17,7 @@
  * 错误归一与文案见 checkoutUtils.ts。
  */
 
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import {sepolia} from "wagmi/chains";
 import {useAccount, useChainId, useSwitchChain, useWaitForTransactionReceipt, useWriteContract} from "wagmi";
 
@@ -35,7 +35,6 @@ export function CheckoutButton({
     courseId,
     priceYD,
     courseKey,
-    recipient: _recipient,
     walletId,
     generateIdempotencyKey,
     onSuccess,
@@ -49,6 +48,8 @@ export function CheckoutButton({
     const [error, setError] = useState<string | null>(null);
     const [intent, setIntent] = useState<PurchaseIntent | null>(null);
     const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
+    const onSuccessRef = useRef(onSuccess);
+    onSuccessRef.current = onSuccess;
 
     const marketAddress = courseMarketDeployments.sepolia.address;
     const onWrongChain = isConnected && chainId !== TARGET_CHAIN_ID;
@@ -69,7 +70,7 @@ export function CheckoutButton({
                 );
                 if (cancelled) return;
                 setState("done");
-                onSuccess?.(ack.onchainTxHash ?? txHash);
+                onSuccessRef.current?.(ack.onchainTxHash ?? txHash);
             } catch (cause) {
                 if (cancelled) return;
                 setState("failed");
@@ -79,7 +80,7 @@ export function CheckoutButton({
         return () => {
             cancelled = true;
         };
-    }, [state, receipt.data, intent, txHash, onSuccess]);
+    }, [state, receipt.data, intent, txHash]);
 
     useEffect(() => {
         if (state !== "confirming") return;

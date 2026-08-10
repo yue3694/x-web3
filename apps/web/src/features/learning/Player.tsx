@@ -64,6 +64,13 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
     /** 进度上报失败的次数（仅展示用） */
     const [progressFailures, setProgressFailures] = useState(0);
 
+    const progressHandle = useProgressReporter({
+        lessonId,
+        courseId: courseId ?? lessonId,
+        videoRef,
+        userId: profile?.id ?? null,
+    });
+
     // ----- 拉取播放凭证 -----
     const issueCredential = useCallback(async (): Promise<PlaybackCredential | null> => {
         if (!profile) return null;
@@ -146,9 +153,10 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
             const now = Date.now();
             if (now - lastReportAt.current < PROGRESS_THROTTLE_MS) return;
             lastReportAt.current = now;
+            progressHandle.reportNow();
             void reportNow(v.currentTime, v.duration || 0);
         },
-        [reportNow],
+        [progressHandle, reportNow],
     );
 
     // 用户主动 seek 后立即上报一次（不算节流窗口）
@@ -156,9 +164,10 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
         (event: React.SyntheticEvent<HTMLVideoElement>) => {
             const v = event.currentTarget;
             lastReportAt.current = Date.now();
+            progressHandle.reportNow();
             void reportNow(v.currentTime, v.duration || 0);
         },
-        [reportNow],
+        [progressHandle, reportNow],
     );
 
     // 离开页面 / 卸载前最后一次上报
@@ -174,13 +183,6 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
     const videoSrc = useMemo(() => credential?.url ?? "", [credential]);
 
     // 5s 兜底轮询上报 + 100% 完成按钮（与 Player.onTimeUpdate 节流互补）
-    const progressHandle = useProgressReporter({
-        lessonId,
-        courseId: courseId ?? lessonId,
-        videoRef,
-        userId: profile?.id ?? null,
-    });
-
     return (
         <section
             className={`learning-player panel${className ? ` ${className}` : ""}`}

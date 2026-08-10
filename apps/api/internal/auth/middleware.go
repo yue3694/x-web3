@@ -64,6 +64,52 @@ func Middleware(verifier Verifier, store *SessionStore, pool *pgxpool.Pool) gin.
 	}
 }
 
+// OptionalMiddleware 在公开读取路径上尽力解析平台 session。
+//
+// 没有 cookie、session 过期或已被撤销时继续以匿名用户访问；只有已解析出的
+// 非 active 账户会被明确拒绝。这样课程详情既保持公开，又能为已登录学生注入
+// user_id，正确计算 enrolled 视图。
+func OptionalMiddleware(verifier Verifier, store *SessionStore, pool *pgxpool.Pool) gin.HandlerFunc {
+	_ = verifier
+	return func(c *gin.Context) {
+		sid, err := c.Cookie(CookieName)
+		if err != nil || sid == "" {
+			c.Next()
+			return
+		}
+		data, err := store.Read(c.Request.Context(), sid)
+		if err != nil || data == nil {
+			c.Next()
+			return
+		}
+		const q = `SELECT id, status FROM users WHERE privy_user_id = $1`
+		var uid uuid.UUID
+		var status string
+		err = pool.QueryRow(c.Request.Context(), q, data.Subject).Scan(&uid, &status)
+		if errors.Is(err, pgx.ErrNoRows) {
+			_ = store.Destroy(c.Request.Context(), sid)
+			c.Next()
+			return
+		}
+		if err != nil {
+			c.Next()
+			return
+		}
+		if status != "active" {
+			_ = store.Destroy(c.Request.Context(), sid)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{
+				"code": string(errcode.Forbidden), "message": "account unavailable",
+				"requestId": c.GetString("request_id"),
+			}})
+			return
+		}
+		c.Set("user_id", uid.String())
+		c.Set("subject", data.Subject)
+		c.Set("sid", sid)
+		c.Next()
+	}
+}
+
 func respond401(c *gin.Context, msg string) {
 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 		"error": gin.H{

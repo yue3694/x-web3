@@ -16,7 +16,8 @@
  * 拦截不到的情况下）。
  */
 
-import {type CSSProperties, type ReactNode} from "react";
+import {type CSSProperties} from "react";
+import {NavLink, Outlet} from "react-router-dom";
 
 import {RequirePermission} from "@/auth/RequirePermission";
 import {useSession} from "@/auth/SessionContext";
@@ -40,20 +41,6 @@ const NAV_ITEMS: NavItem[] = [
         icon: "U",
     },
     {
-        key: "roles",
-        label: "Roles",
-        description: "Role catalog & permission matrix.",
-        path: "/admin/roles",
-        icon: "R",
-    },
-    {
-        key: "courses-review",
-        label: "Courses Review",
-        description: "Approve / reject teacher course submissions.",
-        path: "/admin/courses-review",
-        icon: "C",
-    },
-    {
         key: "chain",
         label: "Chain",
         description: "Indexing sync status & manual rewind.",
@@ -69,29 +56,7 @@ const NAV_ITEMS: NavItem[] = [
         icon: "D",
         sensitive: true,
     },
-    {
-        key: "audit",
-        label: "Audit",
-        description: "Search admin action log.",
-        path: "/admin/audit",
-        icon: "A",
-        sensitive: true,
-    },
-    {
-        key: "certificates-retry",
-        label: "Certificates Retry",
-        description: "Re-enqueue failed certificate jobs.",
-        path: "/admin/certificates-retry",
-        icon: "✓",
-        sensitive: true,
-    },
 ];
-
-interface AdminLayoutProps {
-    children: ReactNode;
-    /** 当前路径（用于高亮侧栏）。如 "/admin/users?page=2"。 */
-    currentPath: string;
-}
 
 const layoutStyle: CSSProperties = {
     display: "grid",
@@ -185,19 +150,12 @@ const sensitiveBadgeStyle: CSSProperties = {
     textTransform: "uppercase",
 };
 
-function isActive(itemPath: string, current: string): boolean {
-    // `/admin/users` 应当高亮 `/admin/users?page=2`。
-    if (current === itemPath) return true;
-    if (current.startsWith(`${itemPath}/`)) return true;
-    return false;
-}
-
-export function AdminLayout({children, currentPath}: AdminLayoutProps) {
+export function AdminLayout() {
     const {profile} = useSession();
 
     return (
         <RequirePermission
-            code="admin"
+            code="SYSTEM_ADMIN"
             fallback={
                 <div className="panel" style={deniedStyle} role="alert">
                     <strong>Access denied.</strong> You need{" "}
@@ -205,7 +163,7 @@ export function AdminLayout({children, currentPath}: AdminLayoutProps) {
                     {profile ? (
                         <div style={{marginTop: "0.4rem", color: "var(--fg-muted)"}}>
                             Signed in as <code>{profile.displayName}</code> — ask a super
-                            admin to grant <code>admin</code> in Users → Roles.
+                            admin to grant <code>SYSTEM_ADMIN</code>.
                         </div>
                     ) : null}
                 </div>
@@ -215,23 +173,9 @@ export function AdminLayout({children, currentPath}: AdminLayoutProps) {
                 <aside style={asideStyle} aria-label="Admin navigation">
                     <h2 style={asideTitleStyle}>Admin Console</h2>
                     <ul style={navListStyle}>
-                        {NAV_ITEMS.map((item) => {
-                            const active = isActive(item.path, currentPath);
-                            return (
+                        {NAV_ITEMS.map((item) => (
                                 <li key={item.key}>
-                                    <a
-                                        href={item.path}
-                                        style={{
-                                            ...navItemBase,
-                                            background: active
-                                                ? "var(--bg-elev)"
-                                                : "transparent",
-                                            borderColor: active
-                                                ? "var(--border-strong)"
-                                                : "transparent",
-                                        }}
-                                        aria-current={active ? "page" : undefined}
-                                    >
+                                    <NavLink to={item.path} style={({isActive}) => ({...navItemBase, background: isActive ? "var(--bg-elev)" : "transparent", borderColor: isActive ? "var(--border-strong)" : "transparent"})}>
                                         <span style={navIconStyle} aria-hidden="true">
                                             {item.icon}
                                         </span>
@@ -246,17 +190,18 @@ export function AdminLayout({children, currentPath}: AdminLayoutProps) {
                                                 sensitive
                                             </span>
                                         ) : null}
-                                    </a>
+                                    </NavLink>
                                 </li>
-                            );
-                        })}
+                        ))}
                     </ul>
                 </aside>
 
                 <main style={mainStyle} className="admin-layout__main">
-                    {children}
+                    <Outlet />
                 </main>
             </div>
         </RequirePermission>
     );
 }
+
+export default AdminLayout;

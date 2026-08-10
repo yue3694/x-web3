@@ -20,11 +20,11 @@ import {test, expect, type Page} from "@playwright/test";
 import {STUB_PROFILES, installPrivyStub} from "./fixtures/privy-stub";
 
 // 固定 UUID + 地址：让断言可重现，避免依赖时间戳 / 随机源。
-const COURSE_ID = "c_00000000-0000-0000-0000-000000000001";
-const INTENT_ID = "i_00000000-0000-0000-0000-000000000001";
-const ORDER_ID = "o_00000000-0000-0000-0000-000000000001";
-const ENROLLMENT_ID = "e_00000000-0000-0000-0000-000000000001";
-const WALLET_ID = "w_00000000-0000-0000-0000-000000000001";
+const COURSE_ID = "00000000-0000-4000-8000-000000000001";
+const INTENT_ID = "00000000-0000-4000-8000-000000000002";
+const ORDER_ID = "00000000-0000-4000-8000-000000000003";
+const ENROLLMENT_ID = "00000000-0000-4000-8000-000000000004";
+const WALLET_ID = "00000000-0000-4000-8000-000000000005";
 const TX_HASH = ("0x" + "ab".repeat(32)) as `0x${string}`;
 const STUDENT_WALLET = ("0x" + "11".repeat(20)) as `0x${string}`;
 const MARKET_ADDRESS = ("0x" + "22".repeat(20)) as `0x${string}`;
@@ -51,6 +51,53 @@ const COURSE_DETAIL = {
     chapters: [{id: "ch_1", position: 1, title: "Ch 1", lessons: [{id: "l_1", position: 1, title: "L1", required: true, durationSeconds: 600}]}],
 };
 
+async function installWalletAndRpc(page: Page) {
+    await page.addInitScript(({address, txHash}) => {
+        const provider = {
+            isMetaMask: true,
+            chainId: "0xaa36a7",
+            networkVersion: "11155111",
+            selectedAddress: address,
+            request: async ({method}: {method: string}) => {
+                if (method === "eth_chainId") return "0xaa36a7";
+                if (method === "net_version") return "11155111";
+                if (method === "eth_requestAccounts" || method === "eth_accounts") return [address];
+                if (method === "eth_sendTransaction" || method === "eth_sendRawTransaction") return txHash;
+                return null;
+            },
+            on: () => undefined,
+            removeListener: () => undefined,
+        };
+        (window as unknown as {ethereum: unknown}).ethereum = provider;
+        const announce = () => window.dispatchEvent(new CustomEvent("eip6963:announceProvider", {detail: {info: {uuid: "350670db-19fa-4704-a166-e52e178b59d2", name: "MetaMask", icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>", rdns: "io.metamask"}, provider}}));
+        window.addEventListener("eip6963:requestProvider", announce);
+        window.setTimeout(announce, 0);
+    }, {address: STUDENT_WALLET, txHash: TX_HASH});
+    await page.route("**/*", async (route) => {
+        const raw = route.request().postData() ?? "";
+        if (!raw.includes("\"jsonrpc\"")) return route.fallback();
+        type Rpc = {method?: string; id?: number};
+        let parsed: Rpc | Rpc[] = {};
+        try { parsed = JSON.parse(raw); } catch { /* ignore */ }
+        const handle = ({method, id = 1}: Rpc) => {
+            let result: unknown = null;
+            if (method === "eth_getTransactionReceipt") result = {transactionHash: TX_HASH, blockHash: "0x" + "aa".repeat(32), blockNumber: "0x1234", from: STUDENT_WALLET, to: MARKET_ADDRESS, status: "0x1", gasUsed: "0x5208", cumulativeGasUsed: "0x5208", logs: [], contractAddress: null, logsBloom: "0x" + "00".repeat(256), transactionIndex: "0x0"};
+            if (method === "eth_blockNumber") result = "0x1234";
+            if (method === "eth_getTransactionCount") result = "0x1";
+            if (method === "eth_gasPrice") result = "0x3b9aca00";
+            if (method === "eth_estimateGas") result = "0x5208";
+            return {jsonrpc: "2.0", id, result};
+        };
+        return route.fulfill({status: 200, contentType: "application/json", body: JSON.stringify(Array.isArray(parsed) ? parsed.map(handle) : handle(parsed))});
+    });
+}
+
+async function connectWallet(page: Page) {
+    await page.getByRole("button", {name: /connect wallet/i}).first().click();
+    await page.getByText(/MetaMask/i).first().click();
+    await expect(page.getByRole("button", {name: /manage wallet/i})).toBeVisible();
+}
+
 const PURCHASE_INTENT = {
     id: INTENT_ID, userId: STUB_PROFILES.student.id, walletId: WALLET_ID, courseId: COURSE_ID,
     priceId: PRICE_ID, courseKey: COURSE_KEY, priceVersion: 1, chainId: 11155111,
@@ -73,10 +120,9 @@ const ENROLLMENT_ITEM = {
  * 真实下单由各用例在 purchase-intents / transactions 上自己打桩。
  */
 async function openCheckoutPanel(page: Page) {
-    await page.goto("/");
-    await page.getByRole("button", {name: /open course intro to yideng finance/i}).click();
-    await expect(page.getByRole("dialog", {name: /course detail/i})).toBeVisible();
-    await page.getByRole("button", {name: /^buy$/i}).first().click();
+    await page.goto("/courses");
+    await page.getByRole("link", {name: /open course intro to yideng finance/i}).click();
+    await page.waitForURL(`**/courses/${COURSE_ID}`);
     await expect(page.locator(".checkout-panel")).toBeVisible();
     await page.locator(".checkout-panel__terms input[type=checkbox]").check();
 }
@@ -87,7 +133,9 @@ test.describe("F03 / 购买 / purchase flow", () => {
     });
 
     test("happy path: sign in → buy → confirmed → enrollment appears in /me/enrollments", async ({page, context}) => {
-        const stub = await installPrivyStub(context, {initialProfile: STUB_PROFILES.student, initialSession: false});
+        await installWalletAndRpc(page);
+        const wallet = {id: WALLET_ID, chainId: 11155111, address: STUDENT_WALLET, isPrimary: true, boundAt: "2026-07-01T00:00:00Z"};
+        const stub = await installPrivyStub(context, {initialProfile: {...STUB_PROFILES.student, primaryWallet: wallet, wallets: [wallet]}, initialSession: false});
 
         // /catalog 列表 + 详情打桩
         await page.route("**/api/v1/courses?**", (r) => r.fulfill({
@@ -104,22 +152,23 @@ test.describe("F03 / 购买 / purchase flow", () => {
             intentCalls += 1;
             return r.fulfill({status: 200, contentType: "application/json", body: JSON.stringify(PURCHASE_INTENT)});
         });
-        await page.route(`**/api/v1/orders/${INTENT_ID}/transactions`, (r) => r.fulfill({
-            status: 200, contentType: "application/json", body: JSON.stringify(ORDER_ACK),
-        }));
+        let transactionSubmitted = false;
+        await page.route(`**/api/v1/orders/${INTENT_ID}/transactions`, (r) => {
+            transactionSubmitted = true;
+            return r.fulfill({status: 200, contentType: "application/json", body: JSON.stringify(ORDER_ACK)});
+        });
 
-        // /me/enrollments：第一次空（MyEnrollments 拉取），purchase 后含新记录
-        let enrollmentsCalls = 0;
+        // 购买前为空；交易确认并跳转到账户路由后返回新报名。
         await page.route("**/api/v1/me/enrollments?**", (r) => {
-            enrollmentsCalls += 1;
-            const items = enrollmentsCalls > 1 ? [ENROLLMENT_ITEM] : [];
+            const items = transactionSubmitted ? [ENROLLMENT_ITEM] : [];
             return r.fulfill({status: 200, contentType: "application/json", body: JSON.stringify({items})});
         });
 
         // 登录
-        await page.goto("/");
+        await page.goto("/courses");
         await page.getByRole("button", {name: /sign in/i}).first().click();
         await expect(page.locator(".user-menu")).toBeVisible();
+        await connectWallet(page);
 
         // 进入购买面板
         await openCheckoutPanel(page);
@@ -128,12 +177,11 @@ test.describe("F03 / 购买 / purchase flow", () => {
         await expect(cta).toHaveAttribute("data-state", "idle");
         await cta.click();
 
-        // 状态机走完：先到中间态（preparing/signing/confirming 任一）→ 终态 done
+        // 状态机进入链上处理中间态；成功后产品会立即跳到独立的报名路由。
         await expect(cta).toHaveAttribute("data-state", /preparing|signing|confirming/);
-        await expect(cta).toHaveAttribute("data-state", "done", {timeout: 10_000});
-
-        // 成功提示出现
-        await expect(page.getByText(/unlock|enrolled|confirmed/i).first()).toBeVisible();
+        await expect(page).toHaveURL(/\/account\/enrollments$/, {timeout: 10_000});
+        await expect(page.getByRole("heading", {name: "My enrollments"})).toBeVisible();
+        await expect(page.locator(".my-enrollments__title", {hasText: COURSE.title})).toBeVisible();
 
         expect(intentCalls).toBeGreaterThanOrEqual(1);
         expect(stub.state().sid).toMatch(/^stub-sid-/);
@@ -147,7 +195,9 @@ test.describe("F03 / 购买 / purchase flow", () => {
     });
 
     test("409 ALREADY_PURCHASED surfaces a user-visible error and stays failed", async ({page, context}) => {
-        await installPrivyStub(context, {initialProfile: STUB_PROFILES.student, initialSession: true});
+        await installWalletAndRpc(page);
+        const wallet = {id: WALLET_ID, chainId: 11155111, address: STUDENT_WALLET, isPrimary: true, boundAt: "2026-07-01T00:00:00Z"};
+        await installPrivyStub(context, {initialProfile: {...STUB_PROFILES.student, primaryWallet: wallet, wallets: [wallet]}, initialSession: true});
         await page.route("**/api/v1/courses?**", (r) => r.fulfill({
             status: 200, contentType: "application/json",
             body: JSON.stringify({items: [COURSE], nextCursor: ""}),
@@ -162,8 +212,9 @@ test.describe("F03 / 购买 / purchase flow", () => {
             body: JSON.stringify({error: {code: "ALREADY_PURCHASED", message: "You already own this course.", requestId: "stub", details: {courseId: COURSE_ID}}}),
         }));
 
-        await page.goto("/");
+        await page.goto("/courses");
         await expect(page.locator(".user-menu")).toBeVisible();
+        await connectWallet(page);
         await openCheckoutPanel(page);
 
         const cta = page.locator(".checkout-button button[data-state]").last();

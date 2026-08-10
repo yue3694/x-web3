@@ -68,6 +68,57 @@ func TestMiddleware_RejectsMissingCookie(t *testing.T) {
 	}
 }
 
+func TestOptionalMiddleware_AllowsMissingCookie(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(auth.OptionalMiddleware(nil, nil, nil))
+	r.GET("/public", func(c *gin.Context) {
+		c.Header("X-User-Id", c.GetString("user_id"))
+		c.Status(http.StatusOK)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/public", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("X-User-Id"); got != "" {
+		t.Fatalf("anonymous user id = %q, want empty", got)
+	}
+}
+
+func TestOptionalMiddleware_InjectsActiveUser(t *testing.T) {
+	pool := testPool(t)
+	store, _, _ := newTestStore(t)
+	ctx := context.Background()
+	subject := "did:privy:optional-" + uuid.NewString()
+	var uid uuid.UUID
+	if err := pool.QueryRow(ctx, `INSERT INTO users(privy_user_id,status) VALUES($1,'active') RETURNING id`, subject).Scan(&uid); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	sid, _, err := store.Issue(ctx, subject, "")
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(auth.OptionalMiddleware(nil, store, pool))
+	r.GET("/public", func(c *gin.Context) {
+		c.Header("X-User-Id", c.GetString("user_id"))
+		c.Status(http.StatusOK)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/public", nil)
+	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: sid})
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("X-User-Id"); got != uid.String() {
+		t.Fatalf("user id = %q, want %q", got, uid)
+	}
+}
+
 // TestMiddleware_RejectsUnknownSID sid 不在 store 中必须 401。
 func TestMiddleware_RejectsUnknownSID(t *testing.T) {
 	store, _, _ := newTestStore(t)

@@ -98,6 +98,9 @@ test.describe("F04 / 完课证书 / certificate flow", () => {
         expect(stub.state().sid).toMatch(/^stub-sid-/);
 
         // playback 凭证
+        await page.route(`**/api/v1/courses/${COURSE_ID}`, (r) => r.fulfill({
+            status: 200, contentType: "application/json", body: JSON.stringify({course: COURSE, enrolled: true, chapters: [{id: "ch_2", position: 1, title: "Core", lessons: [{id: LESSON_ID, position: 1, title: "Advanced DeFi lesson", required: true, durationSeconds: 600}]}]}),
+        }));
         await page.route(`**/api/v1/lessons/${LESSON_ID}/playback`, (r) => r.fulfill({
             status: 200, contentType: "application/json", body: JSON.stringify(PLAYBACK_CRED),
         }));
@@ -141,7 +144,8 @@ test.describe("F04 / 完课证书 / certificate flow", () => {
         await expect(page.locator(".my-certificates")).toBeVisible();
         const certItem = page.locator(".my-certificates__item").filter({hasText: COURSE.title});
         await expect(certItem).toBeVisible();
-        await expect(certItem.locator(".status-pill")).toHaveText(/confirmed/i);
+        await certItem.getByRole("button", {name: /view certificate/i}).click();
+        await expect(page.locator(".my-certificates__detail .status-pill")).toHaveText(/confirmed/i);
     });
 
     test("completion endpoint 422 partial-completion surfaces error and stays in-progress", async ({page, context}) => {
@@ -150,6 +154,10 @@ test.describe("F04 / 完课证书 / certificate flow", () => {
             initialProfile: {...STUB_PROFILES.student, primaryWallet: wallet, wallets: [wallet]},
             initialSession: true,
         });
+
+        await page.route(`**/api/v1/courses/${COURSE_ID}`, (r) => r.fulfill({
+            status: 200, contentType: "application/json", body: JSON.stringify({course: COURSE, enrolled: true, chapters: [{id: "ch_2", position: 1, title: "Core", lessons: [{id: LESSON_ID, position: 1, title: "Advanced DeFi lesson", required: true, durationSeconds: 600}]}]}),
+        }));
 
         await page.route(`**/api/v1/lessons/${LESSON_ID}/playback`, (r) => r.fulfill({
             status: 200, contentType: "application/json", body: JSON.stringify(PLAYBACK_CRED),

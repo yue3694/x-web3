@@ -31,21 +31,21 @@ const TX_HASH = "0x" + "99".repeat(32);
 const PROBE = BigInt(10n ** 15n); // 0.001 YD
 const GAS = BigInt(180_000n);
 const AMOUNT_OUT_95 = BigInt(95n * 10n ** 6n);
+const PROBE_OUT = 1_000n;
 
-// QuoterV2 selector + 4-word tuple encode（amountOut / sqrtPriceX96After / ticksCrossed / gasEstimate）。
-const SELECTOR = "f7729d43";
+// QuoterV2 4-word tuple encode（amountOut / sqrtPriceX96After / ticksCrossed / gasEstimate）。
 const TUPLE = (out: bigint) =>
     "0x" + out.toString(16).padStart(64, "0") + "0".repeat(64 + 64) + GAS.toString(16).padStart(64, "0");
 
-/** QuoterV2 calldata: selector(4) + structOff(32) + tokenIn(32) + tokenOut(32) + fee(32) + sqrt(32) + amountIn(32). */
+/** QuoterV2 calldata: selector(4) + tokenIn(32) + tokenOut(32) + amountIn(32) + fee(32) + sqrt(32). */
 function extractAmountIn(calldata: string): bigint {
     const d = calldata.replace(/^0x/, "");
-    return BigInt("0x" + d.slice(4 + 64 + 64 * 4, 4 + 64 + 64 * 5));
+    return BigInt("0x" + d.slice(8 + 64 * 2, 8 + 64 * 3));
 }
 
 async function stubEthereum(page: Page, opts: {rejectTx?: boolean} = {}) {
     await page.addInitScript(({chainId, address, reject}) => {
-        (window as unknown as {ethereum: unknown}).ethereum = {
+        const provider = {
             isMetaMask: true,
             chainId,
             networkVersion: "11155111",
@@ -67,6 +67,10 @@ async function stubEthereum(page: Page, opts: {rejectTx?: boolean} = {}) {
             on: () => undefined,
             removeListener: () => undefined,
         };
+        (window as unknown as {ethereum: unknown}).ethereum = provider;
+        const announce = () => window.dispatchEvent(new CustomEvent("eip6963:announceProvider", {detail: {info: {uuid: "350670db-19fa-4704-a166-e52e178b59d2", name: "MetaMask", icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>", rdns: "io.metamask"}, provider}}));
+        window.addEventListener("eip6963:requestProvider", announce);
+        window.setTimeout(announce, 0);
     }, {chainId: SEPOLIA, address: STUDENT, reject: Boolean(opts.rejectTx)});
 }
 
@@ -74,38 +78,37 @@ async function stubJsonRpc(page: Page) {
     await page.route("**/*", async (route) => {
         const post = route.request().postData() ?? "";
         if (!post.includes("\"jsonrpc\"")) return route.fallback();
-        let body: {method?: string; params?: Array<{to?: string; data?: string}>; id?: number} = {};
-        try { body = JSON.parse(post); } catch { /* ignore */ }
-        const {method = "", params = [], id = 1} = body;
-        const reply = (r: unknown) => route.fulfill({
-            status: 200, contentType: "application/json",
-            body: JSON.stringify({jsonrpc: "2.0", id, result: r}),
-        });
-
-        if (method === "eth_call" && params[0]) {
+        type RpcRequest = {method?: string; params?: Array<{to?: string; data?: string}>; id?: number};
+        let parsed: RpcRequest | RpcRequest[] = {};
+        try { parsed = JSON.parse(post); } catch { /* ignore */ }
+        const handle = (body: RpcRequest) => {
+          const {method = "", params = [], id = 1} = body;
+          let result: unknown = null;
+          if (method === "eth_call" && params[0]) {
             const c = params[0];
             // QuoterV2.quoteExactInputSingle
-            if (c.to?.toLowerCase() === QUOTER && c.data?.startsWith(SELECTOR)) {
+            if (c.to?.toLowerCase() === QUOTER) {
                 const amt = extractAmountIn(c.data ?? "");
-                return reply(amt === PROBE ? TUPLE(AMOUNT_OUT_95) : TUPLE(AMOUNT_OUT_95));
+                result = amt === PROBE ? TUPLE(PROBE_OUT) : TUPLE(AMOUNT_OUT_95);
             }
             // YD.balanceOf / YD.allowance → 大数（mock 已无限授权）
-            if (c.to?.toLowerCase() === YD && (c.data?.startsWith("70a08231") || c.data?.startsWith("dd62ed3e"))) {
-                return reply("0x" + BigInt(10n ** 24n).toString(16));
+            if (c.to?.toLowerCase() === YD && (c.data?.replace(/^0x/, "").startsWith("70a08231") || c.data?.replace(/^0x/, "").startsWith("dd62ed3e"))) {
+                result = "0x" + BigInt(10n ** 24n).toString(16);
             }
-        }
-        if (method === "eth_getTransactionReceipt") {
-            return reply({
+          }
+          if (method === "eth_getTransactionReceipt") result = {
                 transactionHash: TX_HASH, blockHash: "0x" + "aa".repeat(32), blockNumber: "0x1234",
                 from: STUDENT, to: ROUTER, status: "0x1", gasUsed: "0x2dc6c0", cumulativeGasUsed: "0x2dc6c0",
                 logs: [], contractAddress: null, logsBloom: "0x" + "00".repeat(256), transactionIndex: "0x0",
-            });
-        }
-        if (method === "eth_blockNumber") return reply("0x1234");
-        if (method === "eth_gasPrice") return reply("0x3b9aca00");
-        if (method === "eth_estimateGas") return reply("0x2dc6c0");
-        if (method === "eth_getTransactionCount") return reply("0x1");
-        return reply(null);
+          };
+          if (method === "eth_blockNumber") result = "0x1234";
+          if (method === "eth_gasPrice") result = "0x3b9aca00";
+          if (method === "eth_estimateGas") result = "0x2dc6c0";
+          if (method === "eth_getTransactionCount") result = "0x1";
+          return {jsonrpc: "2.0", id, result};
+        };
+        const response = Array.isArray(parsed) ? parsed.map(handle) : handle(parsed);
+        return route.fulfill({status: 200, contentType: "application/json", body: JSON.stringify(response)});
     });
 }
 
@@ -120,12 +123,14 @@ test.describe("F05 / Swap / YD → USDC demo", () => {
         await stubJsonRpc(page);
 
         await page.goto("/swap");
+        await page.getByRole("button", {name: /connect wallet/i}).first().click();
+        await page.getByText(/MetaMask/i).first().click();
         await expect(page.locator(".swap-card")).toBeVisible();
 
         // amountIn input
         await page.locator(".swap-card input").first().fill("100");
         // quote 落地：SwapSummary 出现 "95"
-        await expect(page.locator(".swap-summary")).toContainText(/95/i, {timeout: 10_000});
+        await expect(page.locator(".swap-card__output")).toContainText(/95/i, {timeout: 10_000});
         // 价格影响 5%
         await expect(page.locator(".price-impact-badge, [data-testid='price-impact']")).toContainText(/5/);
 
@@ -134,9 +139,9 @@ test.describe("F05 / Swap / YD → USDC demo", () => {
         const submit = page.locator(".swap-card__submit");
         await expect(submit).toBeEnabled();
 
-        // 状态机：intermediate → done
+        // RPC mock can settle between browser frames, so assert the durable
+        // terminal state instead of a transient signing/confirming label.
         await submit.click();
-        await expect(submit).toHaveAttribute("data-state", /signing|confirming/);
         await expect(submit).toHaveAttribute("data-state", "done", {timeout: 10_000});
         await expect(submit).toHaveText(/swap again/i);
     });
@@ -147,9 +152,11 @@ test.describe("F05 / Swap / YD → USDC demo", () => {
         await stubJsonRpc(page);
 
         await page.goto("/swap");
+        await page.getByRole("button", {name: /connect wallet/i}).first().click();
+        await page.getByText(/MetaMask/i).first().click();
         await expect(page.locator(".swap-card")).toBeVisible();
         await page.locator(".swap-card input").first().fill("100");
-        await expect(page.locator(".swap-summary")).toContainText(/95/i, {timeout: 10_000});
+        await expect(page.locator(".swap-card__output")).toContainText(/95/i, {timeout: 10_000});
 
         const submit = page.locator(".swap-card__submit");
         await expect(submit).toBeEnabled();

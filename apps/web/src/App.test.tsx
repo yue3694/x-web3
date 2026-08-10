@@ -11,9 +11,10 @@
  * 鉴权门由 SessionContext 提供；这里用 vi.mock 让 useSession 返回我们控制的 profile。
  */
 
-import {afterEach, describe, expect, it, vi} from "vitest";
+import {afterEach, beforeAll, describe, expect, it, vi} from "vitest";
 import {cleanup, render, screen} from "@testing-library/react";
 import {QueryClient, QueryClientProvider} from "@tanstack/react-query";
+import {MemoryRouter} from "react-router-dom";
 
 const mocks = vi.hoisted(() => ({
     profile: null as null | {
@@ -28,7 +29,7 @@ vi.mock("@/auth/SessionContext", () => ({
     useSession: () => ({
         profile: mocks.profile,
         hasPermission: (code: string) => Boolean(mocks.profile?.permissions.includes(code)),
-        hasRole: (role: string) => Boolean(mocks.profile?.roles.includes(role as any)),
+        hasRole: (role: "student" | "teacher" | "super_admin") => Boolean(mocks.profile?.roles.includes(role)),
         isAuthenticated: Boolean(mocks.profile),
         refresh: vi.fn(),
         logout: vi.fn(),
@@ -36,7 +37,7 @@ vi.mock("@/auth/SessionContext", () => ({
 }));
 
 vi.mock("connectkit", () => ({
-    ConnectKitButton: {Custom: ({children}: {children: (args: any) => any}) => children({
+    ConnectKitButton: {Custom: ({children}: {children: (args: {isConnected: boolean; isConnecting: boolean; show: () => void; truncatedAddress: string; address: string; chain: {id: number; name: string}}) => unknown}) => children({
         isConnected: false, isConnecting: false, show: () => {}, truncatedAddress: "0x", address: "0x", chain: {id: 11155111, name: "Sepolia"},
     })},
 }));
@@ -84,9 +85,13 @@ vi.mock("wagmi", () => ({
 
 import {App} from "./App";
 
-function renderWithProviders() {
+beforeAll(() => {
+    Object.defineProperty(window, "scrollTo", {value: vi.fn(), writable: true});
+});
+
+function renderWithProviders(path = "/") {
     const qc = new QueryClient({defaultOptions: {queries: {retry: false}}});
-    return render(<QueryClientProvider client={qc}><App /></QueryClientProvider>);
+    return render(<QueryClientProvider client={qc}><MemoryRouter initialEntries={[path]}><App /></MemoryRouter></QueryClientProvider>);
 }
 
 afterEach(() => {
@@ -99,41 +104,37 @@ describe("App shell", () => {
         mocks.profile = null;
         renderWithProviders();
         expect(screen.getAllByText(/WEB3 UNIVERSITY/i).length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText(/Published courses/i).length).toBeGreaterThanOrEqual(1);
-        // Swap 在 nav link + section heading 出现两次；用 heading role 更精确
-        expect(screen.getAllByRole("heading", {name: /^Swap$/}).length).toBeGreaterThanOrEqual(1);
-        expect(screen.getByText(/Sign in to see your account/i)).toBeTruthy();
+        expect(screen.getByText(/From discovery to proof/i)).toBeTruthy();
+        expect(screen.getByText(/Explore courses/i)).toBeTruthy();
         expect(screen.getByText(/Sepolia Etherscan/i)).toBeTruthy();
     });
 
-    it("TopNav exposes Catalog / Swap / Account anchors", () => {
+    it("TopNav exposes independent routed workspaces", () => {
         mocks.profile = null;
         renderWithProviders();
-        const links = screen.getAllByRole("link", {name: /Catalog|Swap|Account/i});
+        const links = screen.getAllByRole("link", {name: /Courses|Swap|My learning/i});
         const hrefs = links.map((a) => a.getAttribute("href"));
-        expect(hrefs.some((h) => h === "#catalog")).toBe(true);
-        expect(hrefs.some((h) => h === "#swap")).toBe(true);
-        expect(hrefs.some((h) => h === "#account")).toBe(true);
+        expect(hrefs.some((h) => h === "/courses")).toBe(true);
+        expect(hrefs.some((h) => h === "/swap")).toBe(true);
+        expect(hrefs.some((h) => h === "/account/enrollments")).toBe(true);
     });
 
-    it("Account center renders sub-panels for authenticated users", () => {
+    it("Account center renders one routed sub-panel for authenticated users", async () => {
         mocks.profile = {
             id: "u1", displayName: "Alice", roles: ["student"], permissions: [],
         };
-        renderWithProviders();
-        // 至少存在一个面板标题含这些文字（section h3 + 内部组件可能各有一个）
-        expect(screen.getAllByText(/My orders/i).length).toBeGreaterThanOrEqual(1);
+        renderWithProviders("/account/enrollments");
+        expect(await screen.findByText(/Your learning, clearly organized/i)).toBeTruthy();
         expect(screen.getAllByText(/My enrollments/i).length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText(/My certificates/i).length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText(/My comments/i).length).toBeGreaterThanOrEqual(1);
+        expect(screen.queryByText(/My orders/i)).toBeNull();
     });
 
     it("Teacher Studio mounts when COURSE_CREATE permission is present", () => {
         mocks.profile = {
             id: "u2", displayName: "Prof", roles: ["teacher"], permissions: ["COURSE_CREATE"],
         };
-        renderWithProviders();
-        expect(screen.getByText(/Course studio/i)).toBeTruthy();
+        renderWithProviders("/studio");
+        return screen.findByText(/Course studio/i).then((node) => expect(node).toBeTruthy());
     });
 
     it("Admin console mounts when SYSTEM_ADMIN permission is present", () => {
@@ -142,19 +143,15 @@ describe("App shell", () => {
             // AdminLayout 用 code="admin" 守门；SYSTEM_ADMIN 与 admin 都给到保证嵌套通通放行
             permissions: ["SYSTEM_ADMIN", "admin"],
         };
-        renderWithProviders();
-        // Admin console 在外层 section heading + AdminLayout 内部 h2 各出现一次
-        expect(screen.getAllByText(/Admin console/i).length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText(/Users/i).length).toBeGreaterThanOrEqual(1);
-        expect(screen.getByText(/Indexer sync/i)).toBeTruthy();
-        expect(screen.getByText(/Dead-letter queue/i)).toBeTruthy();
+        renderWithProviders("/admin/users");
+        return screen.findByText(/Users & roles/i).then((node) => expect(node).toBeTruthy());
     });
 
     it("Admin console is hidden for non-admin users", () => {
         mocks.profile = {
             id: "u4", displayName: "Student", roles: ["student"], permissions: [],
         };
-        renderWithProviders();
-        expect(screen.queryByText(/Admin console/i)).toBeNull();
+        renderWithProviders("/admin/users");
+        expect(screen.getByText(/Access denied/i)).toBeTruthy();
     });
 });

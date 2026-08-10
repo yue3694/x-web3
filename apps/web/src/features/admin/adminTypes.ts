@@ -56,11 +56,15 @@ export interface AdminUserPage {
 /** 单链同步状态（对齐 chain-sync.yaml DlqRow 上游 chain 状态字段）。 */
 export interface ChainSyncStatus {
     chainId: number;
+    consumer: string;
     nextBlock: number;
-    lagSeconds: number;
-    lastUpdatedAt: string;
-    /** 同步器健康态。 */
-    healthy: boolean;
+    lagSeconds: number | null;
+    lagBlocks: number | null;
+    headBlockNumber: number | null;
+    lastUpdatedAt: string | null;
+    rpcAvailable: boolean;
+    rpcError?: string;
+    checkedAt: string;
 }
 
 // ---------- DLQ ----------
@@ -89,6 +93,12 @@ export interface DlqListResponse {
 /** DLQ 重试请求体（resolution ∈ replayed / ignored / manual）。 */
 export interface DlqRetryRequest {
     resolution: "replayed" | "ignored" | "manual";
+}
+
+export interface DlqRetryResponse {
+    id: number;
+    resolution: DlqRetryRequest["resolution"];
+    resolvedAt: string;
 }
 
 // ---------- Audit ----------

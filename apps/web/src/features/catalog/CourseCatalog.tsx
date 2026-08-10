@@ -1,8 +1,7 @@
 import {useCallback, useEffect, useState} from "react";
+import {Link, useSearchParams} from "react-router-dom";
 import {ApiClientError} from "../../api/client";
 import {courseApi, type Course} from "../../api/types";
-
-import {CourseDetail} from "./CourseDetail";
 
 export function formatCoursePrice(course: Pick<Course, "priceMinor" | "currency">): string {
     if (course.priceMinor === 0) return "Free";
@@ -11,14 +10,12 @@ export function formatCoursePrice(course: Pick<Course, "priceMinor" | "currency"
 
 export function CourseCatalog() {
     const [items, setItems] = useState<Course[]>([]);
-    const [query, setQuery] = useState("");
-    const [appliedQuery, setAppliedQuery] = useState("");
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [query, setQuery] = useState(searchParams.get("q") ?? "");
+    const appliedQuery = searchParams.get("q") ?? "";
     const [nextCursor, setNextCursor] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [activeId, setActiveId] = useState<string | null>(null);
-    /** 购买成功次数：递增即可让 useEffect 重拉列表（enrolled 字段会刷新）。 */
-    const [purchasedTick, setPurchasedTick] = useState(0);
 
     const load = useCallback(async (before?: string) => {
         setLoading(true);
@@ -34,7 +31,7 @@ export function CourseCatalog() {
         }
     }, [appliedQuery]);
 
-    useEffect(() => { void load(); }, [load, purchasedTick]);
+    useEffect(() => { void load(); }, [load]);
 
     return (
         <section className="catalog panel" aria-labelledby="catalog-title">
@@ -44,7 +41,7 @@ export function CourseCatalog() {
                     <h2 id="catalog-title">Published courses</h2>
                     <p>Learn onchain skills from verified university teachers.</p>
                 </div>
-                <form className="catalog-search" onSubmit={(event) => {event.preventDefault(); setAppliedQuery(query);}}>
+                <form className="catalog-search" role="search" onSubmit={(event) => {event.preventDefault(); const next = new URLSearchParams(searchParams); if (query.trim()) next.set("q", query.trim()); else next.delete("q"); setSearchParams(next);}}>
                     <label className="sr-only" htmlFor="course-search">Search courses</label>
                     <input id="course-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search courses..." />
                     <button className="btn--primary" type="submit">Search</button>
@@ -55,20 +52,7 @@ export function CourseCatalog() {
             {!loading && !error && items.length === 0 ? <div className="empty-state"><span>◇</span><h3>No published courses yet</h3><p>New courses will appear here after review.</p></div> : null}
             <div className="course-grid">
                 {items.map((course, index) => (
-                    <article
-                        className="course-card course-card--clickable"
-                        key={course.id}
-                        onClick={() => setActiveId(course.id)}
-                        onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                setActiveId(course.id);
-                            }
-                        }}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Open course ${course.title}`}
-                    >
+                    <Link className="course-card course-card--clickable" key={course.id} to={`/courses/${course.id}`} aria-label={`Open course ${course.title}`}>
                         <div className={`course-card__art course-card__art--${index % 3}`}><span>0{index + 1}</span></div>
                         <div className="course-card__body">
                             <div className="course-card__meta"><span className="status-pill">Published</span><span>{course.teacherName || "University faculty"}</span></div>
@@ -76,19 +60,11 @@ export function CourseCatalog() {
                             <p>{course.description || "Course curriculum details coming soon."}</p>
                             <div className="course-card__footer"><strong>{formatCoursePrice(course)}</strong><span>{course.currentVersion.toString().padStart(2, "0")} modules</span></div>
                         </div>
-                    </article>
+                    </Link>
                 ))}
             </div>
             {nextCursor ? <div className="load-more"><button className="btn--ghost" disabled={loading} onClick={() => void load(nextCursor)}>{loading ? "Loading..." : "Load more"}</button></div> : null}
             {loading && items.length === 0 ? <div className="loading-grid" aria-label="Loading courses">{[0,1,2].map((item) => <div className="course-skeleton" key={item} />)}</div> : null}
-
-            <CourseDetail
-                courseId={activeId}
-                onClose={() => setActiveId(null)}
-                onPurchased={() => {
-                    setPurchasedTick((n) => n + 1);
-                }}
-            />
         </section>
     );
 }

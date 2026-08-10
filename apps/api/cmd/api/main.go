@@ -188,7 +188,7 @@ func main() {
 	catalogGroup := v1.Group("/courses")
 	{
 		catalogGroup.GET("", httpkit.Wrap(courseH.List))
-		catalogGroup.GET("/:id", httpkit.Wrap(courseH.Get))
+		catalogGroup.GET("/:id", auth.OptionalMiddleware(verifier, sessionStore, pool), httpkit.Wrap(courseH.Get))
 		catalogGroup.GET("/:id/comments", httpkit.Wrap(commentH.GetCourseComments))
 	}
 	coursesAuthGroup := v1.Group("/courses")

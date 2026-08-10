@@ -17,7 +17,6 @@ import {useCallback, useEffect, useState} from "react";
 
 import {ApiClientError} from "@/api/client";
 import {useSession} from "@/auth/SessionContext";
-import {AdminLayout} from "@/features/admin/AdminLayout";
 import {adminApi} from "@/features/admin/adminApi";
 import type {AdminRoleCode, AdminUser} from "@/features/admin/adminTypes";
 
@@ -113,11 +112,11 @@ export function UsersPage() {
     }, [page]);
 
     useEffect(() => {
-        if (!hasPermission("admin")) return;
+        if (!hasPermission("SYSTEM_ADMIN")) return;
         void load();
     }, [load, hasPermission]);
 
-    if (!hasPermission("admin")) {
+    if (!hasPermission("SYSTEM_ADMIN")) {
         // AdminLayout 已经渲染了"Access denied"，这里直接 null 即可。
         return null;
     }
@@ -127,7 +126,6 @@ export function UsersPage() {
     const canNext = page < lastPage;
 
     return (
-        <AdminLayout currentPath="/admin/users">
             <section className="panel" style={sectionStyle} aria-labelledby="users-title">
                 <header style={headerStyle}>
                     <span className="eyebrow">Admin · Users</span>
@@ -223,6 +221,7 @@ export function UsersPage() {
                     </button>
                 </footer>
             </section>
-        </AdminLayout>
     );
 }
+
+export default UsersPage;

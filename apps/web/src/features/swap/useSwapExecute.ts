@@ -10,7 +10,7 @@
  * 注意：swap() 只能由用户交互调用，绝不在 useEffect 里触发。
  */
 
-import {useCallback, useEffect, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import {useWaitForTransactionReceipt, useWriteContract} from "wagmi";
 import type {Address} from "viem";
 
@@ -49,6 +49,8 @@ export function useSwapExecute(
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
   const [settlement, setSettlement] = useState<SwapSettlement | null>(null);
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
   // 回执解析需要这两个值，但它们属于「提交那一刻」的快照 —— 不能读当前表单，
   // 否则用户在确认期间改了 token/滑点会算错实际到账。
   const [pending, setPending] = useState<{tokenOut: Address; recipient: Address; min: bigint} | null>(
@@ -69,8 +71,8 @@ export function useSwapExecute(
     };
     setSettlement(done);
     setState("done");
-    onSuccess?.(done);
-  }, [state, receipt.data, txHash, pending, onSuccess]);
+    onSuccessRef.current?.(done);
+  }, [state, receipt.data, txHash, pending]);
 
   useEffect(() => {
     if (state === "confirming" && receipt.error) {

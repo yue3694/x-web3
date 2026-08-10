@@ -14,6 +14,7 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from "react";
+import {useNavigate} from "react-router-dom";
 
 import {ApiClientError} from "@/api/client";
 import {learningApi} from "@/api/learning";
@@ -120,6 +121,7 @@ type CompleteState = "idle" | "submitting" | "success" | "error";
  * 以及 pct=100 时的 "Mark as complete" 按钮。
  */
 export function ProgressReporter({handle, courseId, courseTitle, className}: ProgressReporterProps) {
+    const navigate = useNavigate();
     const [state, setState] = useState<CompleteState>("idle");
     const [errorMsg, setErrorMsg] = useState("");
 
@@ -130,8 +132,7 @@ export function ProgressReporter({handle, courseId, courseTitle, className}: Pro
         try {
             await learningApi.markCourseComplete(courseId);
             setState("success");
-            // 跳转到证书页（无 react-router；用 location.assign 走全量加载）
-            window.location.assign("/account/certificates");
+            navigate("/account/certificates");
         } catch (cause) {
             setState("error");
             if (cause instanceof ApiClientError) {
@@ -140,7 +141,7 @@ export function ProgressReporter({handle, courseId, courseTitle, className}: Pro
                 setErrorMsg("Failed to mark the course as complete.");
             }
         }
-    }, [courseId, state]);
+    }, [courseId, navigate, state]);
 
     return (
         <div className={`progress-reporter${className ? ` ${className}` : ""}`}>

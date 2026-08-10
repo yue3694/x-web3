@@ -21,9 +21,9 @@ import type {
     AuditQuery,
     ChainRewindRequest,
     ChainSyncStatus,
-    DlqEntry,
     DlqListResponse,
     DlqRetryRequest,
+    DlqRetryResponse,
 } from "./adminTypes";
 
 function buildQuery(params: Record<string, string | number | undefined>): string {
@@ -100,8 +100,8 @@ export const adminApi = {
      * POST /admin/dlq/:id/retry
      * body: { resolution: replayed | ignored | manual }
      */
-    async retryDlq(id: number, req: DlqRetryRequest): Promise<DlqEntry> {
-        return apiClient.post<DlqEntry>(`/admin/dlq/${id}/retry`, req);
+    async retryDlq(id: number, req: DlqRetryRequest): Promise<DlqRetryResponse> {
+        return apiClient.post<DlqRetryResponse>(`/admin/dlq/${id}/retry`, req);
     },
 
     // ---------- Audit ----------

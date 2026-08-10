@@ -27,6 +27,10 @@ export const wagmiConfig = createConfig(
             [sepolia.id]: http(SEPOLIA_RPC_URL),
         },
         ssr: false,
+        // Playwright intercepts individual JSON-RPC calls. Keeping multicall
+        // off in the explicit dev stub makes mocked reads deterministic;
+        // production retains viem's default batching behaviour.
+        batch: {multicall: import.meta.env.VITE_PRIVY_DEV_STUB !== "1"},
     }),
 );
 

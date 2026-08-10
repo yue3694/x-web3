@@ -8,6 +8,8 @@
  *   - 底部统计带，给用户立即的「这站点是活的」信号。
  */
 
+import {Link} from "react-router-dom";
+
 interface Stat {
     label: string;
     value: string;
@@ -43,12 +45,12 @@ export function Hero() {
             </p>
 
             <div className="hero__actions">
-                <a href="#catalog" className="btn btn--primary hero__cta">
+                <Link to="/courses" className="btn btn--primary hero__cta">
                     Browse courses →
-                </a>
-                <a href="#studio" className="btn btn--ghost hero__cta">
+                </Link>
+                <Link to="/studio" className="btn btn--ghost hero__cta">
                     Become a teacher
-                </a>
+                </Link>
             </div>
 
             <dl className="hero__stats" aria-label="University at a glance">

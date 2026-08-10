@@ -35,7 +35,8 @@ test.describe("F01 / 身份与权限 / auth flow", () => {
         // TopNav 中没有 user-menu 节点
         await expect(page.locator(".user-menu")).toHaveCount(0);
         // Teacher Studio / Admin 链接被 RequirePermission 隐藏
-        await expect(page.locator(".nav__link--accent")).toHaveCount(0);
+        await expect(page.getByRole("link", {name: /^Studio$/})).toHaveCount(0);
+        await expect(page.getByRole("link", {name: /^Admin$/})).toHaveCount(0);
     });
 
     test("dev-stub login returns deterministic profile and renders user menu", async ({page, context}) => {
@@ -52,7 +53,8 @@ test.describe("F01 / 身份与权限 / auth flow", () => {
         await expect(userMenu).toBeVisible({timeout: 10_000});
         await expect(userMenu.locator(".user-menu__name")).toHaveText(STUB_PROFILES.student.displayName);
         // student 没有 SYSTEM_ADMIN / COURSE_CREATE → nav 不出现入口
-        await expect(page.locator(".nav__link--accent")).toHaveCount(0);
+        await expect(page.getByRole("link", {name: /^Studio$/})).toHaveCount(0);
+        await expect(page.getByRole("link", {name: /^Admin$/})).toHaveCount(0);
         // sid cookie 被 stub 写入
         const cookies = await page.context().cookies();
         expect(cookies.map((c) => c.name)).toContain("sid");
@@ -95,8 +97,8 @@ test.describe("F01 / 身份与权限 / auth flow", () => {
         await page.goto("/");
 
         // Teacher Studio 链接可见；Admin 链接（SYSTEM_ADMIN）不可见
-        await expect(page.locator(".nav__link--accent", {hasText: "Teacher Studio"})).toBeVisible();
-        await expect(page.locator(".nav__link--accent", {hasText: /^Admin$/})).toHaveCount(0);
+        await expect(page.getByRole("link", {name: /^Studio$/})).toBeVisible();
+        await expect(page.getByRole("link", {name: /^Admin$/})).toHaveCount(0);
     });
 
     test("super_admin role reveals both Teacher Studio and Admin links", async ({page, context}) => {
@@ -107,11 +109,8 @@ test.describe("F01 / 身份与权限 / auth flow", () => {
 
         await page.goto("/");
 
-        await expect(page.locator(".nav__link--accent", {hasText: "Teacher Studio"})).toBeVisible();
-        await expect(page.locator(".nav__link--accent", {hasText: /^Admin$/})).toBeVisible();
-        // admin anchor 在 RequirePermission 内渲染（CSS 可能把它定位到隐藏位置——这里
-        // 断言 DOM 存在，UI 隐藏由 super_admin 角色翻转）
-        await expect(page.locator("#admin")).toHaveCount(1);
+        await expect(page.getByRole("link", {name: /^Studio$/})).toBeVisible();
+        await expect(page.getByRole("link", {name: /^Admin$/})).toBeVisible();
     });
 
     test("direct GET /admin/* without sid returns 401 (R-ID-006)", async ({page, context}) => {
@@ -148,7 +147,7 @@ test.describe("F01 / 身份与权限 / auth flow", () => {
 
         // UI 由 useSession().profile 决定 → 显式渲染 Admin 入口（证明前端 UX 隐藏只是 UX，
         // 不是安全机制——下面单独验证 server 仍按真实 role 拒绝 admin endpoint）。
-        await expect(page.locator(".nav__link--accent", {hasText: /^Admin$/})).toBeVisible();
+        await expect(page.getByRole("link", {name: /^Admin$/})).toBeVisible();
 
         // 即使前端"以为"自己是 admin，请求真实 admin endpoint 仍被 stub 按 adminStatus=401 拒绝；
         // 注：这是 E2E 骨架的简化演示——真正的 R-ID-005 在 Go API 的 RBAC 中实现，
