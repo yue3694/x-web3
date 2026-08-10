@@ -17,6 +17,8 @@ export function CourseCatalog() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [activeId, setActiveId] = useState<string | null>(null);
+    /** 购买成功次数：递增即可让 useEffect 重拉列表（enrolled 字段会刷新）。 */
+    const [purchasedTick, setPurchasedTick] = useState(0);
 
     const load = useCallback(async (before?: string) => {
         setLoading(true);
@@ -32,7 +34,7 @@ export function CourseCatalog() {
         }
     }, [appliedQuery]);
 
-    useEffect(() => { void load(); }, [load]);
+    useEffect(() => { void load(); }, [load, purchasedTick]);
 
     return (
         <section className="catalog panel" aria-labelledby="catalog-title">
@@ -80,7 +82,13 @@ export function CourseCatalog() {
             {nextCursor ? <div className="load-more"><button className="btn--ghost" disabled={loading} onClick={() => void load(nextCursor)}>{loading ? "Loading..." : "Load more"}</button></div> : null}
             {loading && items.length === 0 ? <div className="loading-grid" aria-label="Loading courses">{[0,1,2].map((item) => <div className="course-skeleton" key={item} />)}</div> : null}
 
-            <CourseDetail courseId={activeId} onClose={() => setActiveId(null)} />
+            <CourseDetail
+                courseId={activeId}
+                onClose={() => setActiveId(null)}
+                onPurchased={() => {
+                    setPurchasedTick((n) => n + 1);
+                }}
+            />
         </section>
     );
 }

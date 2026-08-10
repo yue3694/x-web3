@@ -22,6 +22,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -387,8 +388,11 @@ func TestOrder_Submit_HappyPath(t *testing.T) {
 	if ord.Status != "submitted" {
 		t.Fatalf("status = %s, want submitted", ord.Status)
 	}
-	if ord.TxHashHex == "" {
-		t.Fatalf("txHashHex empty")
+	if ord.OnchainTxHash == "" {
+		t.Fatalf("onchainTxHash empty")
+	}
+	if !strings.HasPrefix(ord.OnchainTxHash, "0x") {
+		t.Fatalf("onchainTxHash missing 0x prefix: %q", ord.OnchainTxHash)
 	}
 	refreshed, err := svc.GetIntent(ctx, intent.ID)
 	if err != nil {

@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -126,9 +127,12 @@ WHERE pi.id=$1`, intentID).Scan(&dbCourseKey, &dbTokenAddress, &dbAmount, &dbPri
 	if dbChainID != in.ChainID {
 		return uuid.Nil, "", fmt.Errorf("%w: chainId", ErrMismatch)
 	}
+	// want 从 DB 的 intent + wallet 派生，而不是直接用 event 字段。
+	// 这样 ValidateReceipt 才能真正校验「事件是否与链下 intent 一致」——
+	// 否则 buyer / token / amount 等关键字段永远自比，校验形同虚设。
 	want := chain.Intent{
 		CourseKey:    in.Event.CourseKey,
-		Buyer:        in.Event.Buyer,
+		Buyer:        common.HexToAddress(dbWalletAddress),
 		Token:        in.Event.Token,
 		Amount:       in.Event.Amount,
 		IntentID:     in.Event.IntentID,
@@ -183,6 +187,11 @@ WHERE id=$1 AND status IN ('submitted','confirming')`,
 ON CONFLICT(user_id,course_id) DO UPDATE SET source=enrollments.source
 RETURNING id`, userID, courseID).Scan(&enrollmentID)
 	if err != nil {
+		return uuid.Nil, "", err
+	}
+	// 回填 enrollment_id 到 orders：让 API OrderResponse enrollmentId 字段
+	// 在 confirmed 状态下立即可用；前端 MyOrders / GetOrder 无需再二次查询。
+	if _, err := tx.Exec(ctx, `UPDATE orders SET enrollment_id=$1 WHERE id=$2`, enrollmentID, orderID); err != nil {
 		return uuid.Nil, "", err
 	}
 	outboxPayload, _ := json.Marshal(map[string]any{

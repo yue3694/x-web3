@@ -120,6 +120,18 @@ type poolLike interface {
 //   7) 验证 enrollment 行数仍为 1（enrollment 唯一约束）。
 func TestApply_AfterRewind_OrderStaysReorged(t *testing.T) {
 	pool := itPool(t)
+	// 清掉同 (chain_id, common_block, reason) 的旧行：之前测试运行 / 调试
+	// 留下的 chain_reorgs 行会让 count != 1。
+	if _, err := pool.Exec(context.Background(),
+		`DELETE FROM chain_reorgs WHERE chain_id=$1 AND common_block=$2 AND reason='manual_rewind'`,
+		testChainID, int64(1000)); err != nil {
+		t.Fatalf("pre-clean chain_reorgs: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(),
+			`DELETE FROM chain_reorgs WHERE chain_id=$1 AND common_block=$2 AND reason='manual_rewind'`,
+			testChainID, int64(1000))
+	})
 	orderID, userID, courseID, _, txHash, _, _ := seedConfirmedFixture(t, pool)
 	buyer := common.HexToAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
 	in := applyInputFromFixture(orderID, courseID, txHash, buyer)

@@ -183,6 +183,7 @@ func main() {
 		meGroup.DELETE("/wallets/:walletId", walletLimit, httpkit.Wrap(walletH.Unbind))
 		meGroup.GET("/enrollments", httpkit.Wrap(certificateH.ListMineEnrollments))
 		meGroup.GET("/certificates", httpkit.Wrap(certificateH.ListMineCertificates))
+		meGroup.GET("/comments", httpkit.Wrap(commentH.GetMyComments))
 	}
 	catalogGroup := v1.Group("/courses")
 	{

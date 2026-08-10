@@ -111,6 +111,31 @@ func (h *CommentHandler) DeleteMine(c *httpkit.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// GetMyComments 当前用户的所有评论（含 pending / approved / rejected）。
+// 软删的行不再返回。
+//
+// 对应 OpenAPI：GET /me/comments?limit=
+func (h *CommentHandler) GetMyComments(c *httpkit.Context) {
+	uid, err := userIDFromCtx(c)
+	if err != nil {
+		httpkit.Error(c, http.StatusUnauthorized, errcode.SessionExpired, "no session", nil)
+		return
+	}
+	limit := 50
+	if raw := c.Query("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+	items, err := h.repo.ListMyByUser(c.Request.Context(), uid, limit)
+	if err != nil {
+		httpkit.Internal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
 type moderateReq struct {
 	Status string `json:"status" binding:"required"`
 }

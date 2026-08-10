@@ -4,37 +4,61 @@
  * 设计：
  *   - 由 CourseCatalog 卡片点击打开；Esc / 遮罩点击关闭；
  *   - 调 /courses/{id} 拿课程 + 章节；enrolled=true 时才显示受保护章节占位；
- *   - 详情内嵌入 <Comments>，由评论组件自己处理登录 / 已购买 / 软删。
+ *   - 详情内嵌入 <Comments>，由评论组件自己处理登录 / 已购买 / 软删；
+ *   - 未 enrolled 时把 <CheckoutPanel> 嵌在 curriculum 之下，购买成功
+ *     （订单 submitted 后）触发 onPurchased：上层（CourseCatalog）刷新
+ *     该卡 → 重新打开 modal 时 enrolled=true，自动隐藏 checkout。
  *
  * 注意：当前后端 catalog.Get 返回不带 enrolled 字段（OpenAPI 中有但 Go handler
  * 未透传）；此处按 OpenAPI contract 解析，缺失时退化为 false。
  */
 
-import {useEffect, useState} from "react";
+import {useCallback, useEffect, useState} from "react";
 
 import {ApiClientError} from "@/api/client";
 import {courseApi, type CourseDetail as CourseDetailData} from "@/api/types";
+import {useSession} from "@/auth/SessionContext";
+import {courseMarketDeployments} from "@/contracts/deployments";
+
+import {CheckoutPanel} from "@/features/checkout/CheckoutPanel";
+import {courseKeyFromUuid} from "@/features/checkout/derive";
 
 import {Comments} from "./Comments";
 
 interface CourseDetailProps {
     courseId: string | null;
     onClose: () => void;
+    /** 购买成功后上层用于刷新 / 关闭 modal 等。 */
+    onPurchased?: (courseId: string, txHash: `0x${string}`) => void;
 }
 
 interface LoadedDetail extends CourseDetailData {
     enrolled?: boolean;
 }
 
-export function CourseDetail({courseId, onClose}: CourseDetailProps) {
+/** 1 YD = 10^18 wei；USD ↔ YD 1:1 占位（OQ-004 决议后再切换价格预言）。 */
+function priceMinorToYDWei(priceMinor: number): string {
+    if (!Number.isFinite(priceMinor) || priceMinor <= 0) return "0";
+    // priceMinor 是 cents；1 USD = 100 cents = 1 YD = 10^18 wei
+    // → YD wei = (priceMinor / 100) * 10^18 = priceMinor * 10^16
+    const wei = BigInt(priceMinor) * 10n ** 16n;
+    return wei.toString();
+}
+
+export function CourseDetail({courseId, onClose, onPurchased}: CourseDetailProps) {
+    const {profile, loading: sessionLoading} = useSession();
     const [data, setData] = useState<LoadedDetail | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [courseKey, setCourseKey] = useState<`0x${string}` | null>(null);
+    const [keyError, setKeyError] = useState<string | null>(null);
 
     useEffect(() => {
         if (!courseId) {
             setData(null);
             setError("");
+            setCourseKey(null);
+            setKeyError(null);
             return;
         }
         let cancelled = false;
@@ -60,6 +84,25 @@ export function CourseDetail({courseId, onClose}: CourseDetailProps) {
         };
     }, [courseId]);
 
+    // 计算课程链上 key（sha256(uuid)）。
+    useEffect(() => {
+        if (!courseId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const key = await courseKeyFromUuid(courseId);
+                if (!cancelled) setCourseKey(key);
+            } catch (cause) {
+                if (!cancelled) {
+                    setKeyError(cause instanceof Error ? cause.message : "courseKey derivation failed");
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [courseId]);
+
     useEffect(() => {
         if (!courseId) return;
         const onKey = (e: KeyboardEvent) => {
@@ -69,9 +112,25 @@ export function CourseDetail({courseId, onClose}: CourseDetailProps) {
         return () => document.removeEventListener("keydown", onKey);
     }, [courseId, onClose]);
 
+    const generateIdempotencyKey = useCallback(() => {
+        // 32 hex chars from window.crypto.randomUUID + a fallback for SSR/test env.
+        const id = typeof globalThis.crypto?.randomUUID === "function"
+            ? globalThis.crypto.randomUUID()
+            : Math.random().toString(36).slice(2);
+        return id.replace(/-/g, "");
+    }, []);
+
     if (!courseId) return null;
 
     const course = data?.course;
+    const enrolled = data?.enrolled === true;
+
+    // wallet 选择：primary wallet 必须与 chain 匹配；否则从同一 chain 的 wallet 里挑第一个。
+    const marketChainId = courseMarketDeployments.sepolia.chainId;
+    const walletForChain = profile?.wallets.find((w) => w.chainId === marketChainId) ?? null;
+
+    const priceYD = course ? priceMinorToYDWei(course.priceMinor) : "0";
+    const marketAddress = courseMarketDeployments.sepolia.address;
 
     return (
         <div
@@ -103,7 +162,7 @@ export function CourseDetail({courseId, onClose}: CourseDetailProps) {
                             <h2 id="course-detail-title">{course.title}</h2>
                             <p className="muted">
                                 {course.teacherName || "University faculty"} · v{course.currentVersion}
-                                {data?.enrolled ? <span className="status-pill status-pill--published">Enrolled</span> : null}
+                                {enrolled ? <span className="status-pill status-pill--published">Enrolled</span> : null}
                             </p>
                         </header>
 
@@ -134,6 +193,51 @@ export function CourseDetail({courseId, onClose}: CourseDetailProps) {
                                 <p className="muted">No chapters published yet.</p>
                             )}
                         </section>
+
+                        {!enrolled ? (
+                            sessionLoading ? (
+                                <p className="muted" role="status">Loading session…</p>
+                            ) : !profile ? (
+                                <div className="notice notice--info" role="status">
+                                    Sign in to purchase this course.
+                                </div>
+                            ) : !walletForChain ? (
+                                <div className="notice notice--warn" role="alert">
+                                    No wallet bound for chain {marketChainId}.{" "}
+                                    Open your account menu and link one before buying.
+                                </div>
+                            ) : !marketAddress ? (
+                                <div className="notice notice--warn" role="alert">
+                                    CourseMarket contract is not deployed on Sepolia yet.
+                                </div>
+                            ) : !courseKey || keyError ? (
+                                <div className="notice notice--error" role="alert">
+                                    {keyError ?? "Failed to derive courseKey."}
+                                </div>
+                            ) : course.priceMinor <= 0 ? (
+                                <div className="notice notice--info" role="status">
+                                    This course is free; no checkout required.
+                                </div>
+                            ) : (
+                                <CheckoutPanel
+                                    courseId={course.id}
+                                    courseTitle={course.title}
+                                    priceYD={priceYD}
+                                    courseKey={courseKey}
+                                    walletId={walletForChain.id}
+                                    generateIdempotencyKey={generateIdempotencyKey}
+                                    onSuccess={(hash) => {
+                                        onPurchased?.(course.id, hash);
+                                        // 关闭 modal，让上层 catalog 重新拉取 enrolled 字段。
+                                        onClose();
+                                    }}
+                                />
+                            )
+                        ) : (
+                            <div className="notice notice--ok" role="status">
+                                You are enrolled. Open the course player from My Enrollments.
+                            </div>
+                        )}
 
                         <Comments courseId={course.id} courseTitle={course.title} />
                     </>

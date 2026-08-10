@@ -18,12 +18,15 @@ export interface CheckoutContextProps {
     courseId: string;
     /** 课程可读标题（用于 UI 展示）。 */
     courseTitle: string;
-    /** YD 标价（bigint 字符串，最小单位 wei）。 */
+    /** YD 标价（bigint 字符串，最小单位 wei）—— 用于价格拆解展示。
+     *  实际链上金额以 intent.amount（API 锁定）为准。 */
     priceYD: string;
     /** 链上课程键（bytes32 hex，0x 开头，64 字符）。 */
     courseKey: `0x${string}`;
-    /** 收款地址（通常是 marketplace treasury）。 */
-    recipient: `0x${string}`;
+    /** 收款地址。当前 buyCourse 合约签名不再需要 recipient（金额由
+     *  course_prices.amount + intent.amount 锁定），字段保留为可选，
+     *  老 caller 不报错。 */
+    recipient?: `0x${string}`;
     /** 用户在该 chain 上的 wallet.id（UUID），用于 /purchase-intents 入参。 */
     walletId: string;
     /** 幂等键（必须每次点 Buy 都重新生成；不可随机生成又忽略 → 重发就重复扣费）。 */

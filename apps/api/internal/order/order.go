@@ -64,20 +64,25 @@ type PurchaseIntent struct {
 }
 
 // Order 视图层结构。
+//
+// 字段命名对齐 `packages/shared/openapi/order.yaml#/OrderResponse`：
+//   - onchainTxHash 32 字节 hex（带 0x 前缀；空字符串表示未提交 tx）
+//   - enrollmentId 由 worker 事件确认后回填（confirmed 时非空）
 type Order struct {
-	ID          uuid.UUID  `json:"id"`
-	IntentID    uuid.UUID  `json:"intentId"`
-	UserID      uuid.UUID  `json:"userId"`
-	CourseID    uuid.UUID  `json:"courseId"`
-	Status      string     `json:"status"`
-	ChainID     int64      `json:"chainId"`
-	TxHashHex   string     `json:"txHash,omitempty"`
-	BlockNumber *int64     `json:"blockNumber,omitempty"`
-	LogIndex    *int       `json:"logIndex,omitempty"`
-	ConfirmedAt *time.Time `json:"confirmedAt,omitempty"`
-	FailureCode *string    `json:"failureCode,omitempty"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	UpdatedAt   time.Time  `json:"updatedAt"`
+	ID             uuid.UUID  `json:"id"`
+	IntentID       uuid.UUID  `json:"intentId"`
+	UserID         uuid.UUID  `json:"userId"`
+	CourseID       uuid.UUID  `json:"courseId"`
+	Status         string     `json:"status"`
+	ChainID        int64      `json:"chainId"`
+	OnchainTxHash  string     `json:"onchainTxHash,omitempty"`
+	BlockNumber    *int64     `json:"blockNumber,omitempty"`
+	LogIndex       *int       `json:"logIndex,omitempty"`
+	ConfirmedAt    *time.Time `json:"confirmedAt,omitempty"`
+	FailureCode    *string    `json:"failureCode,omitempty"`
+	EnrollmentID   *uuid.UUID `json:"enrollmentId,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
 // Service order 子系统的入口。
@@ -265,9 +270,9 @@ func (s *Service) SubmitTransaction(ctx context.Context, intentID, userID uuid.U
 	var ord Order
 	err = tx.QueryRow(ctx, `INSERT INTO orders(intent_id,user_id,course_id,status,chain_id,tx_hash)
 VALUES($1,$2,$3,'submitted',$4,$5)
-RETURNING id,intent_id,user_id,course_id,status,chain_id,encode(tx_hash,'hex'),block_number,log_index,confirmed_at,failure_code,created_at,updated_at`,
+RETURNING id,intent_id,user_id,course_id,status,chain_id,'0x' || encode(tx_hash,'hex'),block_number,log_index,confirmed_at,failure_code,enrollment_id,created_at,updated_at`,
 		intentID, intent.UserID, intent.CourseID, chainID, txHash).Scan(
-		&ord.ID, &ord.IntentID, &ord.UserID, &ord.CourseID, &ord.Status, &ord.ChainID, &ord.TxHashHex, &ord.BlockNumber, &ord.LogIndex, &ord.ConfirmedAt, &ord.FailureCode, &ord.CreatedAt, &ord.UpdatedAt)
+		&ord.ID, &ord.IntentID, &ord.UserID, &ord.CourseID, &ord.Status, &ord.ChainID, &ord.OnchainTxHash, &ord.BlockNumber, &ord.LogIndex, &ord.ConfirmedAt, &ord.FailureCode, &ord.EnrollmentID, &ord.CreatedAt, &ord.UpdatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return nil, ErrTxAlreadyUsed
@@ -284,9 +289,9 @@ RETURNING id,intent_id,user_id,course_id,status,chain_id,encode(tx_hash,'hex'),b
 func (s *Service) GetOrder(ctx context.Context, id, userID uuid.UUID, isAdmin bool) (*Order, error) {
 	var ord Order
 	var owner uuid.UUID
-	err := s.pool.QueryRow(ctx, `SELECT id,intent_id,user_id,course_id,status,chain_id,encode(tx_hash,'hex'),block_number,log_index,confirmed_at,failure_code,created_at,updated_at
+	err := s.pool.QueryRow(ctx, `SELECT id,intent_id,user_id,course_id,status,chain_id,'0x' || encode(tx_hash,'hex'),block_number,log_index,confirmed_at,failure_code,enrollment_id,created_at,updated_at
 FROM orders WHERE id=$1`, id).Scan(
-		&ord.ID, &ord.IntentID, &ord.UserID, &ord.CourseID, &ord.Status, &ord.ChainID, &ord.TxHashHex, &ord.BlockNumber, &ord.LogIndex, &ord.ConfirmedAt, &ord.FailureCode, &ord.CreatedAt, &ord.UpdatedAt)
+		&ord.ID, &ord.IntentID, &ord.UserID, &ord.CourseID, &ord.Status, &ord.ChainID, &ord.OnchainTxHash, &ord.BlockNumber, &ord.LogIndex, &ord.ConfirmedAt, &ord.FailureCode, &ord.EnrollmentID, &ord.CreatedAt, &ord.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrOrderNotFound
 	}
@@ -305,7 +310,7 @@ func (s *Service) ListMyOrders(ctx context.Context, userID uuid.UUID, limit int)
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id,intent_id,user_id,course_id,status,chain_id,encode(tx_hash,'hex'),block_number,log_index,confirmed_at,failure_code,created_at,updated_at
+	rows, err := s.pool.Query(ctx, `SELECT id,intent_id,user_id,course_id,status,chain_id,'0x' || encode(tx_hash,'hex'),block_number,log_index,confirmed_at,failure_code,enrollment_id,created_at,updated_at
 FROM orders WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2`, userID, limit)
 	if err != nil {
 		return nil, err
@@ -314,7 +319,7 @@ FROM orders WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2`, userID, limit)
 	out := make([]Order, 0, limit)
 	for rows.Next() {
 		var ord Order
-		if err := rows.Scan(&ord.ID, &ord.IntentID, &ord.UserID, &ord.CourseID, &ord.Status, &ord.ChainID, &ord.TxHashHex, &ord.BlockNumber, &ord.LogIndex, &ord.ConfirmedAt, &ord.FailureCode, &ord.CreatedAt, &ord.UpdatedAt); err != nil {
+		if err := rows.Scan(&ord.ID, &ord.IntentID, &ord.UserID, &ord.CourseID, &ord.Status, &ord.ChainID, &ord.OnchainTxHash, &ord.BlockNumber, &ord.LogIndex, &ord.ConfirmedAt, &ord.FailureCode, &ord.EnrollmentID, &ord.CreatedAt, &ord.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, ord)

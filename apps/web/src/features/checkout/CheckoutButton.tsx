@@ -5,11 +5,13 @@
  *
  * 流程：
  *   1. 校验 chainId（错链就调 useSwitchChain 提示切链）。
- *   2. POST /purchase-intents 拿后端签发的 intent。
- *   3. useWriteContract 调用 CourseMarket.purchase(courseKey, recipient)。
+ *   2. POST /purchase-intents 拿后端签发的 intent（携带冻结的 amount + courseKey + intentId）。
+ *   3. useWriteContract 调用 CourseMarket.buyCourse(courseKey, expectedAmount, intentId)。
+ *      expectedAmount 与 intentId 由合约二次校验防 price tampering / 重复 intent。
  *   4. 拿到 txHash 后 useWaitForTransactionReceipt 等待确认。
  *   5. POST /orders/{intentId}/transactions 上报 txHash。
- *   6. 回调 onSuccess(txHash)。
+ *   6. 回调 onSuccess(txHash)；后端推进 orders.status=submitting；worker 拉事件后
+ *      推到 confirmed + 派生 enrollment。
  *
  * 注意：useWriteContract 不会在 useEffect 里调用；只有点击按钮才触发。
  * 错误归一与文案见 checkoutUtils.ts。
@@ -23,6 +25,7 @@ import {apiClient} from "@/api/client";
 import {marketAbi} from "@/contracts/market.abi";
 import {courseMarketDeployments} from "@/contracts/deployments";
 
+import {uuidToBytes16} from "./derive";
 import {buttonLabel, isUserRejected, normalizeError} from "./checkoutUtils";
 import type {CheckoutContextProps, CheckoutState, OrderTransactionAck, PurchaseIntent} from "./checkoutTypes";
 
@@ -32,7 +35,7 @@ export function CheckoutButton({
     courseId,
     priceYD,
     courseKey,
-    recipient,
+    recipient: _recipient,
     walletId,
     generateIdempotencyKey,
     onSuccess,
@@ -46,10 +49,6 @@ export function CheckoutButton({
     const [error, setError] = useState<string | null>(null);
     const [intent, setIntent] = useState<PurchaseIntent | null>(null);
     const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
-
-    if (!marketAbi) {
-        throw new Error("ABI not yet exported");
-    }
 
     const marketAddress = courseMarketDeployments.sepolia.address;
     const onWrongChain = isConnected && chainId !== TARGET_CHAIN_ID;
@@ -124,11 +123,15 @@ export function CheckoutButton({
             setIntent(fresh);
 
             setState("signing");
+            // expectedAmount 用 intent.amount（API 在 CreateIntent 时已按 course_prices 锁定）；
+            // intentId 取 purchase_intents.id 的高 128 位 big-endian，对齐合约 bytes16。
+            const expectedAmount = BigInt(fresh.amount);
+            const intentIdBytes16 = uuidToBytes16(fresh.id);
             const hash = await writeContractAsync({
                 address: marketAddress,
                 abi: marketAbi,
-                functionName: "purchase",
-                args: [courseKey, recipient],
+                functionName: "buyCourse",
+                args: [courseKey, expectedAmount, intentIdBytes16],
                 chainId: TARGET_CHAIN_ID,
             });
             setTxHash(hash);
