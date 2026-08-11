@@ -16,6 +16,8 @@ import {apiClient} from "@/api/client";
 
 import type {
     AdminRoleChangeRequest,
+    AdminCourseReviewQueue,
+    AdminCourseReviewItem,
     AdminUserPage,
     AuditListResponse,
     AuditQuery,
@@ -37,6 +39,16 @@ function buildQuery(params: Record<string, string | number | undefined>): string
 }
 
 export const adminApi = {
+    // ---------- Course review ----------
+
+    async listCoursesForReview(): Promise<AdminCourseReviewQueue> {
+        return apiClient.get<AdminCourseReviewQueue>("/admin/courses");
+    },
+
+    async reviewCourse(courseId: string, action: "approve" | "reject", reason = ""): Promise<AdminCourseReviewItem> {
+        return apiClient.post<AdminCourseReviewItem>(`/admin/courses/${courseId}/review`, {action, reason});
+    },
+
     // ---------- Users / Roles ----------
 
     /**

@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     replace: vi.fn(),
     get: vi.fn(),
     submit: vi.fn(),
+    listMine: vi.fn(),
 }));
 
 vi.mock("@/api/client", async () => {
@@ -43,6 +44,7 @@ vi.mock("@/api/types", async () => {
             submit: mocks.submit,
             replaceCurriculum: mocks.replace,
             list: vi.fn(),
+            listMine: mocks.listMine,
             get: mocks.get,
         },
     };
@@ -68,6 +70,7 @@ beforeEach(() => {
     mocks.replace.mockReset();
     mocks.get.mockReset();
     mocks.submit.mockReset().mockResolvedValue(draftCourse);
+    mocks.listMine.mockReset().mockResolvedValue({items: []});
 });
 
 afterEach(() => {

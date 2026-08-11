@@ -160,7 +160,9 @@ func main() {
 	authH := handlers.NewAuthHandler(cfg, pool, verifier, sessionStore, auditWriter, logger)
 	walletH := handlers.NewWalletHandler(cfg, pool, walletSvc, auditWriter, logger)
 	meH := handlers.NewMeHandler(pool, auditWriter, logger, authH)
-	courseH := handlers.NewCourseHandler(courseRepo, catalogSvc, auditWriter)
+	courseH := handlers.NewCourseHandler(courseRepo, catalogSvc, auditWriter, &course.SettlementPrice{
+		ChainID: cfg.ChainID, TokenAddress: cfg.YDTokenAddress, MarketAddress: cfg.CourseMarketAddress, Decimals: 18,
+	})
 	mediaH := handlers.NewMediaHandler(mediaRepo, objStore, auditWriter, logger)
 	learningH := handlers.NewLearningHandler(learningSvc, auditWriter, logger)
 	commentH := handlers.NewCommentHandler(commentRepo, auditWriter, logger)
@@ -213,6 +215,7 @@ func main() {
 	teacherGroup := v1.Group("/teacher")
 	teacherGroup.Use(auth.Middleware(verifier, sessionStore, pool))
 	{
+		teacherGroup.GET("/courses", rbacEngine.Middleware(user.PermCourseCreate), httpkit.Wrap(courseH.ListMine))
 		teacherGroup.POST("/courses", rbacEngine.Middleware(user.PermCourseCreate), httpkit.Wrap(courseH.Create))
 		teacherGroup.PUT("/courses/:id", rbacEngine.Middleware(user.PermCourseEdit), httpkit.Wrap(courseH.Update))
 		teacherGroup.PUT("/courses/:id/curriculum", rbacEngine.Middleware(user.PermCourseEdit), httpkit.Wrap(courseH.ReplaceCurriculum))
@@ -225,6 +228,7 @@ func main() {
 	courseAdminGroup := v1.Group("/admin/courses")
 	courseAdminGroup.Use(auth.Middleware(verifier, sessionStore, pool), rbacEngine.Middleware(user.PermCourseApprove))
 	{
+		courseAdminGroup.GET("", httpkit.Wrap(courseH.ListReviewQueue))
 		courseAdminGroup.POST("/:id/review", httpkit.Wrap(courseH.Review))
 		courseAdminGroup.POST("/:id/archive", httpkit.Wrap(courseH.Archive))
 	}

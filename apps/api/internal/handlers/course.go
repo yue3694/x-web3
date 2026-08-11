@@ -23,13 +23,14 @@ import (
 // 公开读路径走 catalog.Service（带 Redis 缓存）；写路径直接调 course.Repo，
 // 写完调 catalog.Invalidate 让所有实例清缓存。
 type CourseHandler struct {
-	repo    *course.Repo
-	catalog *catalog.Service
-	auditor *audit.Writer
+	repo       *course.Repo
+	catalog    *catalog.Service
+	auditor    *audit.Writer
+	settlement *course.SettlementPrice
 }
 
-func NewCourseHandler(repo *course.Repo, cat *catalog.Service, auditor *audit.Writer) *CourseHandler {
-	return &CourseHandler{repo: repo, catalog: cat, auditor: auditor}
+func NewCourseHandler(repo *course.Repo, cat *catalog.Service, auditor *audit.Writer, settlement *course.SettlementPrice) *CourseHandler {
+	return &CourseHandler{repo: repo, catalog: cat, auditor: auditor, settlement: settlement}
 }
 
 type courseWriteRequest struct {
@@ -147,6 +148,33 @@ func (h *CourseHandler) ReplaceCurriculum(c *httpkit.Context) {
 
 func (h *CourseHandler) Submit(c *httpkit.Context) { h.transition(c, review.Submit, false, "") }
 
+func (h *CourseHandler) ListMine(c *httpkit.Context) {
+	uid, err := userIDFromCtx(c)
+	if err != nil {
+		httpkit.Error(c, http.StatusUnauthorized, errcode.SessionExpired, "no session", nil)
+		return
+	}
+	items, err := h.repo.ListByTeacher(c.Request.Context(), uid)
+	if err != nil {
+		httpkit.Internal(c, err)
+		return
+	}
+	type detail struct {
+		Course   course.Course    `json:"course"`
+		Chapters []course.Chapter `json:"chapters"`
+	}
+	result := make([]detail, 0, len(items))
+	for _, item := range items {
+		chapters, err := h.repo.Curriculum(c.Request.Context(), item.ID, false)
+		if err != nil {
+			httpkit.Internal(c, err)
+			return
+		}
+		result = append(result, detail{Course: item, Chapters: chapters})
+	}
+	c.JSON(http.StatusOK, gin.H{"items": result})
+}
+
 type reviewRequest struct {
 	Action review.Action `json:"action" binding:"required"`
 	Reason string        `json:"reason"`
@@ -161,7 +189,60 @@ func (h *CourseHandler) Review(c *httpkit.Context) {
 		httpkit.Error(c, http.StatusBadRequest, errcode.BadRequest, "action must be approve or reject", nil)
 		return
 	}
+	if req.Action == review.Approve {
+		h.transitionWithSettlement(c, req.Action, req.Reason)
+		return
+	}
 	h.transition(c, req.Action, true, req.Reason)
+}
+
+func (h *CourseHandler) transitionWithSettlement(c *httpkit.Context, action review.Action, reason string) {
+	uid, err := userIDFromCtx(c)
+	if err != nil {
+		httpkit.Error(c, http.StatusUnauthorized, errcode.SessionExpired, "no session", nil)
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpkit.Error(c, http.StatusBadRequest, errcode.BadRequest, "invalid course id", nil)
+		return
+	}
+	updated, err := h.repo.TransitionWithSettlement(c.Request.Context(), id, uid, action, true, reason, h.settlement)
+	if err != nil {
+		mapCourseError(c, err)
+		return
+	}
+	if h.catalog != nil {
+		_ = h.catalog.Invalidate(c.Request.Context())
+	}
+	c.JSON(http.StatusOK, updated)
+}
+
+func (h *CourseHandler) ListReviewQueue(c *httpkit.Context) {
+	items, err := h.repo.ListPendingReview(c.Request.Context())
+	if err != nil {
+		httpkit.Internal(c, err)
+		return
+	}
+	type queueItem struct {
+		course.Course
+		ChapterCount int `json:"chapterCount"`
+		LessonCount  int `json:"lessonCount"`
+	}
+	result := make([]queueItem, 0, len(items))
+	for _, item := range items {
+		chapters, err := h.repo.Curriculum(c.Request.Context(), item.ID, false)
+		if err != nil {
+			httpkit.Internal(c, err)
+			return
+		}
+		lessonCount := 0
+		for _, chapter := range chapters {
+			lessonCount += len(chapter.Lessons)
+		}
+		result = append(result, queueItem{Course: item, ChapterCount: len(chapters), LessonCount: lessonCount})
+	}
+	c.JSON(http.StatusOK, gin.H{"items": result})
 }
 
 func (h *CourseHandler) Archive(c *httpkit.Context) { h.transition(c, review.Archive, true, "") }
@@ -210,9 +291,9 @@ func (h *CourseHandler) Get(c *httpkit.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"course":    courseObj,
-		"chapters":  chapters,
-		"enrolled":  enrolled,
+		"course":   courseObj,
+		"chapters": chapters,
+		"enrolled": enrolled,
 	})
 }
 

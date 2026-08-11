@@ -14,14 +14,17 @@
 
 import {useCallback, useEffect, useState} from "react";
 import {Link, useNavigate} from "react-router-dom";
+import {useAccount, useChainId} from "wagmi";
 
 import {ApiClientError} from "@/api/client";
 import {courseApi, type CourseDetail as CourseDetailData} from "@/api/types";
 import {useSession} from "@/auth/SessionContext";
+import {TARGET_CHAIN_NAME} from "@/chains";
 import {courseMarketDeployments} from "@/contracts/deployments";
 
 import {CheckoutPanel} from "@/features/checkout/CheckoutPanel";
 import {courseKeyFromUuid} from "@/features/checkout/derive";
+import {WalletLink} from "@/features/wallet/WalletLink";
 
 import {Comments} from "./Comments";
 
@@ -43,6 +46,8 @@ function priceMinorToYDWei(priceMinor: number): string {
 export function CourseDetail({courseId}: CourseDetailProps) {
     const navigate = useNavigate();
     const {profile, loading: sessionLoading} = useSession();
+    const {address, isConnected} = useAccount();
+    const connectedChainId = useChainId();
     const [data, setData] = useState<LoadedDetail | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -104,7 +109,9 @@ export function CourseDetail({courseId}: CourseDetailProps) {
 
     // wallet 选择：primary wallet 必须与 chain 匹配；否则从同一 chain 的 wallet 里挑第一个。
     const marketChainId = courseMarketDeployments.target.chainId;
-    const walletForChain = profile?.wallets.find((w) => w.chainId === marketChainId) ?? null;
+    const walletForChain = profile?.wallets.find((wallet) =>
+        wallet.chainId === marketChainId && wallet.address.toLowerCase() === address?.toLowerCase(),
+    ) ?? null;
 
     const priceYD = course ? priceMinorToYDWei(course.priceMinor) : "0";
     const marketAddress = courseMarketDeployments.target.address;
@@ -163,14 +170,21 @@ export function CourseDetail({courseId}: CourseDetailProps) {
                                 <div className="notice notice--info" role="status">
                                     Sign in to purchase this course.
                                 </div>
-                            ) : !walletForChain ? (
+                            ) : !isConnected || !address ? (
                                 <div className="notice notice--warn" role="alert">
-                                    No wallet bound for chain {marketChainId}.{" "}
-                                    Open your account menu and link one before buying.
+                                    Connect a wallet from the top-right button before buying.
+                                </div>
+                            ) : connectedChainId !== marketChainId ? (
+                                <div className="notice notice--warn" role="alert">
+                                    Switch the connected wallet to {TARGET_CHAIN_NAME} before buying.
+                                </div>
+                            ) : !walletForChain ? (
+                                <div className="notice notice--info" role="status">
+                                    <WalletLink />
                                 </div>
                             ) : !marketAddress ? (
                                 <div className="notice notice--warn" role="alert">
-                                    CourseMarket contract is not deployed on Sepolia yet.
+                                    CourseMarket contract is not deployed on {TARGET_CHAIN_NAME} yet.
                                 </div>
                             ) : !courseKey || keyError ? (
                                 <div className="notice notice--error" role="alert">

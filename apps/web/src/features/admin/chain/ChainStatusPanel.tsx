@@ -16,13 +16,15 @@ import {useCallback, useEffect, useState} from "react";
 import {useAccount} from "wagmi";
 
 import {ApiClientError} from "@/api/client";
+import {TARGET_CHAIN_ID, TARGET_CHAIN_NAME} from "@/chains";
 import {adminApi} from "@/features/admin/adminApi";
 import type {ChainSyncStatus} from "@/features/admin/adminTypes";
 
-const FALLBACK_CHAIN_ID = 11155111; // Sepolia
+const FALLBACK_CHAIN_ID = TARGET_CHAIN_ID;
 
 const KNOWN_CHAINS: ReadonlyArray<{id: number; label: string}> = [
-    {id: 11155111, label: "Sepolia"},
+    {id: TARGET_CHAIN_ID, label: TARGET_CHAIN_NAME},
+    ...(TARGET_CHAIN_ID === 11155111 ? [] : [{id: 11155111, label: "Sepolia"}]),
     {id: 1, label: "Ethereum mainnet"},
     {id: 137, label: "Polygon"},
     {id: 421614, label: "Arbitrum Sepolia"},

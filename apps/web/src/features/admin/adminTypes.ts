@@ -51,6 +51,29 @@ export interface AdminUserPage {
     total: number;
 }
 
+// ---------- Course review ----------
+
+export interface AdminCourseReviewItem {
+    id: string;
+    teacherId: string;
+    teacherName: string;
+    slug: string;
+    title: string;
+    description: string;
+    status: "pending_review";
+    currentVersion: number;
+    priceMinor: number;
+    currency: string;
+    createdAt: string;
+    updatedAt: string;
+    chapterCount: number;
+    lessonCount: number;
+}
+
+export interface AdminCourseReviewQueue {
+    items: AdminCourseReviewItem[];
+}
+
 // ---------- Chain sync ----------
 
 /** 单链同步状态（对齐 chain-sync.yaml DlqRow 上游 chain 状态字段）。 */

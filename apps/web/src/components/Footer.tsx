@@ -6,6 +6,7 @@
  */
 
 import {Link} from "react-router-dom";
+import {TARGET_CHAIN_ID, TARGET_CHAIN_NAME} from "@/chains";
 
 interface FooterColumn {
     title: string;
@@ -24,7 +25,7 @@ const COLUMNS: FooterColumn[] = [
     {
         title: "Resources",
         links: [
-            {label: "Sepolia Etherscan", href: "https://sepolia.etherscan.io/", external: true},
+            ...(TARGET_CHAIN_ID === 11155111 ? [{label: "Sepolia Etherscan", href: "https://sepolia.etherscan.io/", external: true}] : []),
             {label: "EAS attestations", href: "https://attest.sh/", external: true},
             {label: "Foundry book", href: "https://book.getfoundry.sh/", external: true},
         ],
@@ -47,7 +48,7 @@ export function Footer() {
                 <div className="site-footer__brand">
                     <span className="site-footer__logo">◆ WEB3 UNIVERSITY</span>
                     <p>
-                        A university for the open internet. Built on Sepolia with
+                        A university for the open internet. Built on {TARGET_CHAIN_NAME} with
                         verifiable credentials for every receipt.
                     </p>
                 </div>
@@ -69,13 +70,9 @@ export function Footer() {
             <div className="site-footer__bar">
                 <span>// system_status: online</span>
                 <span>© {year} x-web3 · MIT license</span>
-                <a
-                    href="https://sepolia.etherscan.io/"
-                    target="_blank"
-                    rel="noreferrer"
-                >
-                    sepolia.etherscan.io ↗
-                </a>
+                {TARGET_CHAIN_ID === 11155111 ? (
+                    <a href="https://sepolia.etherscan.io/" target="_blank" rel="noreferrer">sepolia.etherscan.io ↗</a>
+                ) : <span>chain_id: {TARGET_CHAIN_ID}</span>}
             </div>
         </footer>
     );

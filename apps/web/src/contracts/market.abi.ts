@@ -16,6 +16,13 @@ import type {Abi} from "viem";
 export const marketAbi = [
     {
         type: "function",
+        name: "owner",
+        inputs: [],
+        outputs: [{name: "", type: "address"}],
+        stateMutability: "view",
+    },
+    {
+        type: "function",
         name: "buyCourse",
         inputs: [
             {name: "courseKey", type: "bytes32"},

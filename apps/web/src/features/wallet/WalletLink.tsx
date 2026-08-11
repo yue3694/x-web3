@@ -59,7 +59,7 @@ export function WalletLink({domain, onLinked}: WalletLinkProps) {
     if (!isConnected || !address) {
         return (
             <div className="wallet-link">
-                <p>Connect a wallet first to link it to your account.</p>
+                <p>Connect a wallet first.</p>
             </div>
         );
     }
@@ -112,10 +112,10 @@ export function WalletLink({domain, onLinked}: WalletLinkProps) {
     return (
         <div className="wallet-link">
             <p>
-                Connected: <code>{address}</code> (chainId {chainId})
+                Verify the connected wallet once before its first purchase. This signature is free and does not send a transaction.
             </p>
-            <button type="button" onClick={handleLink} disabled={busy}>
-                {busy ? "Linking…" : "Link this wallet to my account"}
+            <button className="btn--primary" type="button" onClick={handleLink} disabled={busy}>
+                {busy ? "Verifying…" : "Verify wallet to continue"}
             </button>
             {error ? (
                 <p role="alert" style={{color: "var(--ck-body-color-danger)"}}>

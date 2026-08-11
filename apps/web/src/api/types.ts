@@ -155,8 +155,15 @@ export interface CoursePage {
 
 export interface CourseDetail {
     course: Course;
-    chapters: Array<{id: string; position: number; title: string; lessons: Array<{id: string; position: number; title: string; required: boolean; durationSeconds: number}>}>;
+    chapters: CourseChapter[];
     enrolled: boolean;
+}
+
+export interface CourseChapter {
+    id: string;
+    position: number;
+    title: string;
+    lessons: Array<{id: string; position: number; title: string; required: boolean; durationSeconds: number; mediaAssetId?: string}>;
 }
 
 export interface CourseWriteRequest {
@@ -216,6 +223,9 @@ export function buildCourseQuery(input: {q?: string; priceMax?: number; before?:
 }
 
 export const courseApi = {
+    listMine(): Promise<{items: Array<{course: Course; chapters: CourseChapter[]}>}> {
+        return apiClient.get<{items: Array<{course: Course; chapters: CourseChapter[]}>}>("/teacher/courses");
+    },
     list(input: {q?: string; priceMax?: number; before?: string; limit?: number} = {}): Promise<CoursePage> {
         return apiClient.get<CoursePage>(`/courses?${buildCourseQuery(input)}`);
     },

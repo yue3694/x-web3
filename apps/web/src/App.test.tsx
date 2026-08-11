@@ -48,7 +48,7 @@ vi.mock("@privy-io/react-auth", () => ({
 
 vi.mock("@/api/client", () => ({
     ApiClientError: class extends Error {},
-    apiClient: {post: vi.fn(), put: vi.fn(), get: vi.fn(), delete: vi.fn()},
+    apiClient: {post: vi.fn(), put: vi.fn(), get: vi.fn().mockResolvedValue({items: []}), delete: vi.fn()},
 }));
 
 vi.mock("@/api/learning", () => ({
@@ -106,7 +106,7 @@ describe("App shell", () => {
         expect(screen.getAllByText(/WEB3 UNIVERSITY/i).length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText(/From discovery to proof/i)).toBeTruthy();
         expect(screen.getByText(/Explore courses/i)).toBeTruthy();
-        expect(screen.getByText(/Sepolia Etherscan/i)).toBeTruthy();
+        expect(screen.getByText(/chain_id: 31337/i)).toBeTruthy();
     });
 
     it("TopNav exposes independent routed workspaces", () => {

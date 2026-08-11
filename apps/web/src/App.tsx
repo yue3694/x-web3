@@ -24,6 +24,7 @@ const AccountCommentsPage = lazy(() => import("./pages/AccountLayout").then((mod
 const StudioPage = lazy(() => import("./pages/StudioPage"));
 const AdminLayout = lazy(() => import("./features/admin/AdminLayout"));
 const UsersPage = lazy(() => import("./features/admin/users/UsersPage"));
+const CourseReviewPage = lazy(() => import("./features/admin/courses/CourseReviewPage"));
 const ChainStatusPanel = lazy(() => import("./features/admin/chain/ChainStatusPanel"));
 const DlqPage = lazy(() => import("./features/admin/dlq/DlqPage"));
 
@@ -70,8 +71,9 @@ export function App() {
                 </Route>
                 <Route path="studio" element={<StudioPage />} />
                 <Route path="admin" element={<AdminLayout />}>
-                    <Route index element={<Navigate to="users" replace />} />
+                    <Route index element={<Navigate to="courses" replace />} />
                     <Route path="users" element={<UsersPage />} />
+                    <Route path="courses" element={<CourseReviewPage />} />
                     <Route path="chain" element={<ChainStatusPanel />} />
                     <Route path="dlq" element={<DlqPage />} />
                 </Route>

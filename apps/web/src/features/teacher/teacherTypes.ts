@@ -20,6 +20,8 @@ export interface DraftLesson {
   required: boolean;
   durationSeconds: number;
   mediaAssetId?: string;
+  /** 仅作 UI 回显用，不发到后端（后端只收 mediaAssetId）。 */
+  mediaUrl?: string;
 }
 
 export interface DraftChapter {

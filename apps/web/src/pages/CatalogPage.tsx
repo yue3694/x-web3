@@ -1,4 +1,5 @@
 import {CourseCatalog} from "@/features/catalog/CourseCatalog";
+import {TARGET_CHAIN_NAME} from "@/chains";
 
 export default function CatalogPage() {
     return (
@@ -6,7 +7,7 @@ export default function CatalogPage() {
             <header className="page-hero">
                 <span className="eyebrow">Course marketplace</span>
                 <h1>Find your next onchain skill.</h1>
-                <p>Search published courses, inspect the complete curriculum, then enroll through a verified Sepolia transaction.</p>
+                <p>Search published courses, inspect the complete curriculum, then enroll through a verified {TARGET_CHAIN_NAME} transaction.</p>
             </header>
             <CourseCatalog />
         </div>

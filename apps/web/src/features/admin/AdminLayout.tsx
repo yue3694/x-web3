@@ -41,6 +41,14 @@ const NAV_ITEMS: NavItem[] = [
         icon: "U",
     },
     {
+        key: "courses",
+        label: "Courses",
+        description: "Review and publish submitted courses.",
+        path: "/admin/courses",
+        icon: "C",
+        sensitive: true,
+    },
+    {
         key: "chain",
         label: "Chain",
         description: "Indexing sync status & manual rewind.",

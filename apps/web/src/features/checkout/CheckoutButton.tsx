@@ -158,7 +158,9 @@ export function CheckoutButton({
                 }),
             ]);
             if (balance < expectedAmount) {
-                throw new Error("Insufficient YD balance for this purchase");
+                throw new Error(TARGET_CHAIN_ID === 31337
+                    ? "Insufficient YD balance. For local Anvil, use the funded deployment account."
+                    : "Insufficient YD balance for this purchase");
             }
             if (allowance < expectedAmount) {
                 setState("approving");

@@ -9,6 +9,7 @@
  */
 
 import {Link} from "react-router-dom";
+import {TARGET_CHAIN_ID, TARGET_CHAIN_NAME} from "@/chains";
 
 interface Stat {
     label: string;
@@ -18,7 +19,7 @@ interface Stat {
 
 const STATS: Stat[] = [
     {value: "12+", label: "Published courses", hint: "Across 4 tracks"},
-    {value: "Sepolia", label: "Testnet deployment", hint: "Verified on Etherscan"},
+    {value: TARGET_CHAIN_NAME, label: "Test chain", hint: TARGET_CHAIN_ID === 31337 ? "Local Anvil" : "Verified on Etherscan"},
     {value: "EAS", label: "Credential receipts", hint: "Onchain proof of work"},
     {value: "Open", label: "Source", hint: "MIT licensed"},
 ];
@@ -28,7 +29,7 @@ export function Hero() {
         <section className="hero" id="top">
             <span className="hero__eyebrow">
                 <span className="hero__eyebrow-dot" aria-hidden="true" />
-                Web3 University · Sepolia testnet
+                Web3 University · {TARGET_CHAIN_NAME}
             </span>
 
             <h1 className="hero__title">

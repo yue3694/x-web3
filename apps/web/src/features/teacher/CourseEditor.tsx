@@ -3,32 +3,32 @@
  *
  * 结构：
  *   - 元数据表单 (title / description / price) → courseApi.create / update
- *   - 章节拖拽排序 (ChapterReorderList) + 课时增删 + 媒体上传 (MediaUploader)
+ *   - 章节拖拽排序 (ChapterReorderList) + 课时增删 + 媒体附件（MediaUrlAttacher）
  *   - 章节草稿整体保存：courseApi.replaceCurriculum（PUT + If-Match 乐观锁）
  *
  * 数据流：
  *   create → 返回 Course（拿到 id + currentVersion）→ 草稿 curriculum 进入编辑器
  *   addChapter / addLesson / removeChapter / removeLesson → setChapters
  *   reorderChapter → setChapters（基于 drag list）
- *   uploadLessonMedia(chapterId, lessonId, asset) → setChapters（写 lesson.mediaAssetId）
+ *   attachLessonMedia(chapterId, lessonId, asset) → setChapters（写 lesson.mediaAssetId）
  *   saveCurriculum → courseApi.replaceCurriculum；版本号回填到 Course.currentVersion
  *     STALE_VERSION → 友好提示 + 引导 reload（不做强制刷新，避免丢失草稿）
  *
  * F02-T12 完成度：
  *   - [x] 章节拖拽（ChapterReorderList，原生 HTML5 dnd + 键盘）
  *   - [x] 章节 / 课时增删 + 标题编辑
- *   - [x] 课时媒体上传（绑定到 lesson.mediaAssetId）
+ *   - [x] 课时媒体附件（URL 形式，绑定到 lesson.mediaAssetId）
  *   - [x] 整体 curriculum 保存（PUT + 乐观锁 + STALE_VERSION UX）
  *   - [x] 保存冲突提示（F02-T16 联动：STALE_VERSION 时弹窗，offer reload）
  */
 
-import {useEffect, useMemo, useState, type FormEvent} from "react";
+import {useCallback, useEffect, useMemo, useState, type FormEvent} from "react";
 
 import {ApiClientError} from "@/api/client";
-import {courseApi, type Course} from "@/api/types";
+import {courseApi, type Course, type CourseChapter} from "@/api/types";
 
 import {ChapterReorderList, type ChapterReorderItem} from "./ChapterReorderList";
-import {MediaUploader} from "./MediaUploader";
+import {MediaUrlAttacher} from "./MediaUrlAttacher";
 import type {DraftChapter, DraftLesson, MediaAsset} from "./teacherTypes";
 import {createDraftChapter, createDraftLesson, isCurriculumValid, toCurriculumInput} from "./teacherTypes";
 
@@ -45,13 +45,16 @@ function lessonKey(chapter: DraftChapter, lesson: DraftLesson): string {
 }
 
 export function CourseEditor() {
+    type MineItem = {course: Course; chapters: CourseChapter[]};
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [price, setPrice] = useState("0");
     const [course, setCourse] = useState<Course | null>(null);
+    const [mine, setMine] = useState<MineItem[]>([]);
     const [chapters, setChapters] = useState<DraftChapter[]>(seedChapters);
     const [busy, setBusy] = useState(false);
     const [savingCurriculum, setSavingCurriculum] = useState(false);
+    const [savedCurriculum, setSavedCurriculum] = useState("");
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
     /** stale-version 冲突信号：true 时下方出现 "Discard / Reload latest" 双按钮。 */
@@ -59,22 +62,76 @@ export function CourseEditor() {
 
     const valid = useMemo(() => title.trim().length > 0 && Number(price) >= 0, [title, price]);
     const curriculumValid = useMemo(() => isCurriculumValid(chapters), [chapters]);
+    const curriculumSaved = curriculumValid && savedCurriculum === JSON.stringify(chapters);
 
     const reorderItems: ChapterReorderItem<DraftChapter>[] = useMemo(
         () => chapters.map((c) => ({id: c.clientId, title: c.title || "(untitled chapter)", payload: c})),
         [chapters],
     );
 
+    const restore = useCallback((selected: MineItem) => {
+        const restored = selected.chapters.map((chapter) => ({
+            clientId: `chapter-${chapter.id}`,
+            title: chapter.title,
+            lessons: chapter.lessons.map((lesson) => ({
+                clientId: `lesson-${lesson.id}`,
+                title: lesson.title,
+                required: lesson.required,
+                durationSeconds: lesson.durationSeconds,
+                mediaAssetId: lesson.mediaAssetId,
+            })),
+        }));
+        setCourse(selected.course);
+        setTitle(selected.course.title);
+        setDescription(selected.course.description);
+        setPrice((selected.course.priceMinor / 100).toString());
+        setChapters(restored.length ? restored : seedChapters());
+        setSavedCurriculum(restored.length ? JSON.stringify(restored) : "");
+        setMessage("");
+        setError("");
+    }, []);
+
+    const startNew = () => {
+        setCourse(null);
+        setTitle("");
+        setDescription("");
+        setPrice("0");
+        setChapters(seedChapters());
+        setSavedCurriculum("");
+        setMessage("");
+        setError("");
+    };
+
+    useEffect(() => {
+        let cancelled = false;
+        void courseApi.listMine().then((response) => {
+            if (cancelled || response.items.length === 0) return;
+            const selected = response.items.find((item) => item.course.status === "draft") ?? response.items[0];
+            setMine(response.items);
+            restore(selected);
+        }).catch(() => {
+            // A new teacher legitimately has no resumable draft; the create form remains usable.
+        });
+        return () => { cancelled = true; };
+    }, [restore]);
+
     // 创建草稿课程（POST /teacher/courses）→ 拿到 id + currentVersion
-    async function create(event: FormEvent) {
+    async function saveDetails(event: FormEvent) {
         event.preventDefault();
         if (!valid) return;
         setBusy(true); setMessage(""); setError(""); setStaleConflict(false);
         try {
-            const slug = `${title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now().toString(36)}`;
-            const created = await courseApi.create({slug, title, description, priceMinor: Math.round(Number(price) * 100), currency: "USD"});
-            setCourse(created);
-            setMessage("Draft saved. Add curriculum below and click 'Save curriculum' before submitting for review.");
+            const input = {title, description, priceMinor: Math.round(Number(price) * 100), currency: "USD"};
+            if (course) {
+                const updated = await courseApi.update(course.id, course.currentVersion, input);
+                setCourse(updated);
+                setMessage("Course details saved.");
+            } else {
+                const slug = `${title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now().toString(36)}`;
+                const created = await courseApi.create({...input, slug});
+                setCourse(created);
+                setMessage("Draft created. Complete and save the curriculum before submitting it.");
+            }
         } catch (cause) {
             setError(cause instanceof ApiClientError ? cause.message : "Could not create the draft.");
         } finally { setBusy(false); }
@@ -105,6 +162,7 @@ export function CourseEditor() {
             const body = {chapters: toCurriculumInput(chapters)};
             const resp = await courseApi.replaceCurriculum(course.id, course.currentVersion, body);
             setCourse({...course, currentVersion: resp.currentVersion});
+            setSavedCurriculum(JSON.stringify(chapters));
             setMessage(`Curriculum saved (v${resp.currentVersion}).`);
         } catch (cause) {
             if (cause instanceof ApiClientError && cause.code === "STALE_VERSION") {
@@ -175,13 +233,21 @@ export function CourseEditor() {
                 : c
         )));
     }
-    function uploadLessonMedia(chapterClientId: string, lessonClientId: string, asset: MediaAsset) {
-        updateLesson(chapterClientId, lessonClientId, {mediaAssetId: asset.id});
-        setMessage(`Attached ${asset.s3Key.split("/").pop()} to lesson.`);
+    function attachLessonMedia(chapterClientId: string, lessonClientId: string, asset: MediaAsset) {
+        updateLesson(chapterClientId, lessonClientId, {mediaAssetId: asset.id, mediaUrl: asset.s3Key});
+        const tail = asset.s3Key.split("/").pop() || asset.s3Key;
+        setMessage(`Attached ${tail} to lesson.`);
+    }
+
+    function detachLessonMedia(chapterClientId: string, lessonClientId: string) {
+        updateLesson(chapterClientId, lessonClientId, {mediaAssetId: undefined, mediaUrl: undefined});
+        setMessage("Removed attachment from lesson.");
     }
 
     // 若用户在 idle 状态下已经有 dirty 草稿，按下 enter 不会误触发 create
-    useEffect(() => { setStaleConflict(false); }, [chapters, title, description, price]);
+    useEffect(() => {
+        setStaleConflict(false);
+    }, [chapters, title, description, price]);
 
     return (
         <section className="teacher-studio panel" aria-labelledby="studio-title">
@@ -194,13 +260,29 @@ export function CourseEditor() {
                 {course ? <span className={`status-pill status-pill--${course.status}`}>{course.status.replace("_", " ")}</span> : null}
             </div>
 
-            <form className="editor-grid card" onSubmit={create}>
-                <label><span>Course title</span><input required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Smart Contract Security" /></label>
-                <label><span>Price (USD)</span><input required min="0" step="0.01" type="number" value={price} onChange={(event) => setPrice(event.target.value)} /></label>
-                <label className="editor-grid__wide"><span>Description</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What will students be able to build?" rows={5} /></label>
+            {mine.length ? (
+                <div className="card editor-actions">
+                    <label>
+                        <span>My courses</span>
+                        <select value={course?.id ?? ""} onChange={(event) => {
+                            const selected = mine.find((item) => item.course.id === event.target.value);
+                            if (selected) restore(selected);
+                        }}>
+                            {mine.map((item) => <option key={item.course.id} value={item.course.id}>{item.course.title} · {item.course.status.replace("_", " ")}</option>)}
+                        </select>
+                    </label>
+                    <button className="btn--ghost" type="button" onClick={startNew}>New draft</button>
+                </div>
+            ) : null}
+
+            <form className="editor-grid card" onSubmit={saveDetails}>
+                <label><span>Course title</span><input required disabled={Boolean(course && course.status !== "draft")} maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Smart Contract Security" /></label>
+                <label><span>Price (USD)</span><input required disabled={Boolean(course && course.status !== "draft")} min="0" step="0.01" type="number" value={price} onChange={(event) => setPrice(event.target.value)} /></label>
+                <label className="editor-grid__wide"><span>Description</span><textarea disabled={Boolean(course && course.status !== "draft")} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What will students be able to build?" rows={5} /></label>
                 <div className="editor-actions editor-grid__wide">
-                    <button className="btn--primary" disabled={busy || !valid || course?.status === "pending_review"} type="submit">{busy ? "Saving..." : course ? "Create another draft" : "Create draft"}</button>
-                    {course?.status === "draft" ? <button className="btn--ghost" disabled={busy || savingCurriculum} onClick={() => void submit()} type="button">Submit review</button> : null}
+                    <button className="btn--primary" disabled={busy || !valid || Boolean(course && course.status !== "draft")} type="submit">{busy ? "Saving..." : course ? "Save details" : "Create draft"}</button>
+                    {course?.status === "draft" ? <button className="btn--ghost" disabled={busy || savingCurriculum || !curriculumSaved} onClick={() => void submit()} type="button">Submit for publishing</button> : null}
+                    {course?.status === "draft" && !curriculumSaved ? <span className="muted">Save a valid curriculum to enable submission.</span> : null}
                     <span>{message}</span>
                 </div>
             </form>
@@ -277,14 +359,12 @@ export function CourseEditor() {
                                 {chapter.lessons.map((lesson) => (
                                     <div key={lessonKey(chapter, lesson)} className="editor-lesson__media-row">
                                         <span className="editor-lesson__media-label">{lesson.title || "(untitled lesson)"}</span>
-                                        {lesson.mediaAssetId ? (
-                                            <span className="status-pill status-pill--ready">attached · {lesson.mediaAssetId.slice(0, 8)}</span>
-                                        ) : (
-                                            <MediaUploader
-                                                label="Attach video"
-                                                onUploaded={(asset) => uploadLessonMedia(chapter.clientId, lesson.clientId, asset)}
-                                            />
-                                        )}
+                                        <MediaUrlAttacher
+                                            label="Attach video"
+                                            initialUrl={lesson.mediaUrl ?? ""}
+                                            onAttached={(asset) => attachLessonMedia(chapter.clientId, lesson.clientId, asset)}
+                                            onClear={() => detachLessonMedia(chapter.clientId, lesson.clientId)}
+                                        />
                                     </div>
                                 ))}
                             </div>

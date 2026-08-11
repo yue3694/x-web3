@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -64,6 +65,15 @@ type ListFilter struct {
 	BeforeAt  *time.Time
 	BeforeID  *uuid.UUID
 	Limit     int
+}
+
+// SettlementPrice is the chain configuration recorded when an admin publishes
+// a paid course. The admin UI writes the same values to CourseMarket first.
+type SettlementPrice struct {
+	ChainID       int64
+	TokenAddress  string
+	MarketAddress string
+	Decimals      int
 }
 
 type LessonInput struct {
@@ -178,6 +188,16 @@ RETURNING id,teacher_id,slug,title,status,current_version,price_minor,currency,p
 }
 
 func (r *Repo) Transition(ctx context.Context, courseID, actorID uuid.UUID, action review.Action, admin bool, reason string) (*Course, error) {
+	return r.transition(ctx, courseID, actorID, action, admin, reason, nil)
+}
+
+// TransitionWithSettlement publishes a course and records the matching active
+// chain price in the same database transaction.
+func (r *Repo) TransitionWithSettlement(ctx context.Context, courseID, actorID uuid.UUID, action review.Action, admin bool, reason string, settlement *SettlementPrice) (*Course, error) {
+	return r.transition(ctx, courseID, actorID, action, admin, reason, settlement)
+}
+
+func (r *Repo) transition(ctx context.Context, courseID, actorID uuid.UUID, action review.Action, admin bool, reason string, settlement *SettlementPrice) (*Course, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -198,6 +218,17 @@ func (r *Repo) Transition(ctx context.Context, courseID, actorID uuid.UUID, acti
 	if action != review.Submit && !admin {
 		return nil, ErrForbidden
 	}
+	if action == review.Submit || action == review.Approve {
+		var hasLesson bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (
+SELECT 1 FROM course_versions v JOIN chapters ch ON ch.course_version_id=v.id JOIN lessons l ON l.chapter_id=ch.id
+WHERE v.course_id=$1 AND v.version=(SELECT current_version FROM courses WHERE id=$1))`, courseID).Scan(&hasLesson); err != nil {
+			return nil, err
+		}
+		if !hasLesson {
+			return nil, fmt.Errorf("%w: at least one lesson is required", ErrStateConflict)
+		}
+	}
 	to, err := review.Next(from, action)
 	if err != nil {
 		return nil, ErrStateConflict
@@ -217,10 +248,64 @@ RETURNING id,teacher_id,slug,title,status,current_version,price_minor,currency,p
 	if err != nil {
 		return nil, err
 	}
+	if action == review.Approve && c.PriceMinor > 0 {
+		if settlement == nil || settlement.ChainID <= 0 || settlement.TokenAddress == "" || settlement.MarketAddress == "" {
+			return nil, fmt.Errorf("%w: settlement configuration required", ErrStateConflict)
+		}
+		amount := new(big.Int).Mul(big.NewInt(c.PriceMinor), new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(settlement.Decimals-2)), nil))
+		if _, err = tx.Exec(ctx, `UPDATE course_prices SET valid_to=now() WHERE course_id=$1 AND chain_id=$2 AND valid_to IS NULL`, c.ID, settlement.ChainID); err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO course_prices(course_id,version,chain_id,token_address,amount,decimals,market_address)
+VALUES($1,$2,$3,$4,$5,$6,$7)`, c.ID, c.CurrentVersion, settlement.ChainID, settlement.TokenAddress, amount.String(), settlement.Decimals, settlement.MarketAddress); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	return &c, nil
+}
+
+// ListPendingReview returns the admin publication queue.
+func (r *Repo) ListPendingReview(ctx context.Context) ([]Course, error) {
+	rows, err := r.pool.Query(ctx, `SELECT c.id,c.teacher_id,u.display_name,c.slug,c.title,v.description,c.status,c.current_version,c.price_minor,c.currency,c.published_at,c.created_at,c.updated_at
+FROM courses c JOIN users u ON u.id=c.teacher_id JOIN course_versions v ON v.course_id=c.id AND v.version=c.current_version
+WHERE c.status='pending_review' AND c.deleted_at IS NULL ORDER BY c.updated_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Course, 0)
+	for rows.Next() {
+		var c Course
+		if err := rows.Scan(&c.ID, &c.TeacherID, &c.TeacherName, &c.Slug, &c.Title, &c.Description, &c.Status, &c.CurrentVersion, &c.PriceMinor, &c.Currency, &c.PublishedAt, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// ListByTeacher returns all non-deleted courses so Studio can resume work after
+// a refresh or an admin rejection.
+func (r *Repo) ListByTeacher(ctx context.Context, teacherID uuid.UUID) ([]Course, error) {
+	rows, err := r.pool.Query(ctx, `SELECT c.id,c.teacher_id,u.display_name,c.slug,c.title,v.description,c.status,c.current_version,c.price_minor,c.currency,c.published_at,c.created_at,c.updated_at
+FROM courses c JOIN users u ON u.id=c.teacher_id JOIN course_versions v ON v.course_id=c.id AND v.version=c.current_version
+WHERE c.teacher_id=$1 AND c.deleted_at IS NULL ORDER BY c.updated_at DESC`, teacherID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Course, 0)
+	for rows.Next() {
+		var c Course
+		if err := rows.Scan(&c.ID, &c.TeacherID, &c.TeacherName, &c.Slug, &c.Title, &c.Description, &c.Status, &c.CurrentVersion, &c.PriceMinor, &c.Currency, &c.PublishedAt, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 func (r *Repo) GetPublished(ctx context.Context, id uuid.UUID) (*Course, error) {

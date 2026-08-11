@@ -23,20 +23,40 @@ function Brand() {
     );
 }
 
-function WalletChip() {
+function AccountActions() {
+    const {profile} = useSession();
     return (
         <ConnectKitButton.Custom>
             {({isConnected, isConnecting, show, address, truncatedAddress, chain}) => {
-                if (!isConnected) return <button type="button" className="btn btn--primary nav__cta" disabled={isConnecting} onClick={show}>{isConnecting ? "Linking…" : "Connect wallet"}</button>;
                 const wrongChain = chain?.id !== undefined && chain.id !== TARGET_CHAIN_ID;
-                return <button type="button" className={`wallet-chip${wrongChain ? " wallet-chip--warn" : ""}`} onClick={show} aria-label={wrongChain ? `Wrong network, switch to ${TARGET_CHAIN_NAME}` : "Manage wallet"}><span className="wallet-chip__dot" aria-hidden="true" /><span className="wallet-chip__net">{chain?.name ?? "Unknown"}</span><span className="wallet-chip__addr">{truncatedAddress ?? address}</span></button>;
+                if (profile) {
+                    return (
+                        <UserMenu
+                            wallet={{
+                                connected: isConnected,
+                                connecting: isConnecting,
+                                address: truncatedAddress ?? address,
+                                network: chain?.name ?? "Unknown",
+                                wrongChain,
+                                manage: () => show?.(),
+                            }}
+                        />
+                    );
+                }
+                return (
+                    <>
+                        <button type="button" className="btn btn--primary nav__cta" disabled={isConnecting} onClick={() => show?.()}>
+                            {isConnecting ? "Linking…" : isConnected ? "Manage wallet" : "Connect wallet"}
+                        </button>
+                        <SignInButton className="btn btn--ghost">Sign in</SignInButton>
+                    </>
+                );
             }}
         </ConnectKitButton.Custom>
     );
 }
 
 export function TopNav() {
-    const {profile} = useSession();
     const {pathname} = useLocation();
     const [scrolled, setScrolled] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -59,8 +79,7 @@ export function TopNav() {
                     <RequirePermission code="SYSTEM_ADMIN"><NavLink to="/admin" className={navClass}>Admin</NavLink></RequirePermission>
                 </nav>
                 <div className="nav__cluster">
-                    <WalletChip />
-                    {profile ? <UserMenu /> : <SignInButton className="btn btn--ghost">Sign in</SignInButton>}
+                    <AccountActions />
                     <button type="button" className="nav__menu" aria-label="Toggle navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}><span /><span /></button>
                 </div>
             </div>

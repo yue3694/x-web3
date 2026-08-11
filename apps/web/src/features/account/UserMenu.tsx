@@ -1,28 +1,32 @@
 /**
  * UserMenu — 当前登录用户的下拉菜单。
  *
- * 与 TopNav 中的 wallet chip 配合：钱包地址/网络仅在 TopNav 显示一次，
- * 这里只展示「账户级别的」信息：displayName、角色、所有绑定钱包、解绑、登出。
+ * 钱包连接与网络管理统一交给 TopNav 的 ConnectKit。
+ * 这里只展示平台账户信息：displayName、角色和登出。
  */
 
 import {useEffect, useRef, useState} from "react";
 import {useDisconnect} from "wagmi";
 
-import {authApi} from "@/api/types";
-import {ApiClientError} from "@/api/client";
 import {useSession} from "@/auth/SessionContext";
-import {WalletLink} from "@/features/wallet/WalletLink";
 
 interface UserMenuProps {
     /** 触发按钮的 aria-label */
     label?: string;
+    wallet: {
+        connected: boolean;
+        connecting: boolean;
+        address?: string;
+        network: string;
+        wrongChain: boolean;
+        manage: () => void;
+    };
 }
 
-export function UserMenu({label = "Open account menu"}: UserMenuProps) {
-    const {profile, refresh, logout, hasRole} = useSession();
+export function UserMenu({label = "Open account menu", wallet}: UserMenuProps) {
+    const {profile, logout, hasRole} = useSession();
     const {disconnect} = useDisconnect();
     const [open, setOpen] = useState(false);
-    const [busy, setBusy] = useState<string | null>(null);
     const rootRef = useRef<HTMLDivElement | null>(null);
 
     // 点击外部或 Esc 关闭。
@@ -44,23 +48,6 @@ export function UserMenu({label = "Open account menu"}: UserMenuProps) {
 
     if (!profile) return null;
 
-    const onUnbind = async (id: string) => {
-        setBusy(id);
-        try {
-            await authApi.unbindWallet(id);
-            await refresh();
-        } catch (e) {
-            const msg =
-                e instanceof ApiClientError
-                    ? `${e.code}: ${e.message}`
-                    : "unbind failed";
-            // 静默失败时也提示（这里只 console；UI 弹窗可在后续 PR 加）
-            console.error(msg);
-        } finally {
-            setBusy(null);
-        }
-    };
-
     const onLogout = async () => {
         await logout();
         disconnect();
@@ -69,19 +56,32 @@ export function UserMenu({label = "Open account menu"}: UserMenuProps) {
 
     const initial = (profile.displayName?.[0] ?? "?").toUpperCase();
     const isSuper = hasRole("super_admin");
+    const walletStatus = wallet.connecting ? "Connecting…" : wallet.connected ? wallet.network : "Wallet disconnected";
+
+    const manageWallet = () => {
+        setOpen(false);
+        wallet.manage();
+    };
 
     return (
         <div className="user-menu" ref={rootRef}>
             <button
                 type="button"
-                className="user-menu__trigger"
+                className={`user-menu__trigger${wallet.wrongChain ? " user-menu__trigger--warn" : ""}${!wallet.connected ? " user-menu__trigger--offline" : ""}`}
                 aria-haspopup="menu"
                 aria-expanded={open}
                 aria-label={label}
                 onClick={() => setOpen((v) => !v)}
             >
                 <span className="user-menu__avatar" aria-hidden="true">{initial}</span>
-                <span className="user-menu__name">{profile.displayName}</span>
+                <span className="user-menu__summary">
+                    <span className="user-menu__name">{profile.displayName}</span>
+                    <span className="user-menu__wallet-summary">
+                        <span className="wallet-chip__dot" aria-hidden="true" />
+                        <span className="wallet-chip__net">{walletStatus}</span>
+                        {wallet.connected && wallet.address ? <span className="wallet-chip__addr">{wallet.address}</span> : null}
+                    </span>
+                </span>
                 <span className="user-menu__caret" aria-hidden="true">▾</span>
             </button>
 
@@ -97,28 +97,15 @@ export function UserMenu({label = "Open account menu"}: UserMenuProps) {
                     </header>
 
                     <section className="user-menu__section">
-                        <h3>Wallets</h3>
-                        {profile.wallets.length === 0 ? (
-                            <p className="muted">No wallets bound yet.</p>
-                        ) : (
-                            <ul className="user-menu__wallets">
-                                {profile.wallets.map((w) => (
-                                    <li key={w.id}>
-                                        <code>{w.address}</code>
-                                        <span className="user-menu__chain">chain {w.chainId}</span>
-                                        <button
-                                            type="button"
-                                            className="btn--ghost"
-                                            onClick={() => void onUnbind(w.id)}
-                                            disabled={busy === w.id}
-                                        >
-                                            {busy === w.id ? "Unbinding…" : "Unbind"}
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                        <WalletLink onLinked={refresh} />
+                        <h3>Wallet</h3>
+                        <button type="button" className="user-menu__wallet-action" onClick={manageWallet}>
+                            <span className="wallet-chip__dot" aria-hidden="true" />
+                            <span>
+                                <strong>{walletStatus}</strong>
+                                <small>{wallet.connected ? wallet.address : "Connect to continue with onchain actions"}</small>
+                            </span>
+                            <span aria-hidden="true">→</span>
+                        </button>
                     </section>
 
                     <footer className="user-menu__footer">
