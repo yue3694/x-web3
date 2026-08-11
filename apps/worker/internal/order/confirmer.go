@@ -32,6 +32,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -127,16 +128,14 @@ WHERE pi.id=$1`, intentID).Scan(&dbCourseKey, &dbTokenAddress, &dbAmount, &dbPri
 	if dbChainID != in.ChainID {
 		return uuid.Nil, "", fmt.Errorf("%w: chainId", ErrMismatch)
 	}
-	// want 从 DB 的 intent + wallet 派生，而不是直接用 event 字段。
-	// 这样 ValidateReceipt 才能真正校验「事件是否与链下 intent 一致」——
-	// 否则 buyer / token / amount 等关键字段永远自比，校验形同虚设。
-	want := chain.Intent{
-		CourseKey:    in.Event.CourseKey,
-		Buyer:        common.HexToAddress(dbWalletAddress),
-		Token:        in.Event.Token,
-		Amount:       in.Event.Amount,
-		IntentID:     in.Event.IntentID,
-		PriceVersion: in.Event.PriceVersion,
+	// want 严格派生自 DB 的 intent + wallet；**绝不**从 in.Event 拷贝。
+	//
+	// 历史教训（PR-A2 修复）：早期版本 CourseKey / Token / Amount / IntentID /
+	// PriceVersion 全部从 in.Event 取，导致 chain.ValidateReceipt 形同自比 —
+	// 恶意事件 / bug 事件能直接推进 order 到 confirmed。
+	want, err := buildIntentFromDB(dbCourseKey, dbTokenAddress, dbAmount, dbPriceVersion, intentID, dbWalletAddress)
+	if err != nil {
+		return uuid.Nil, "", fmt.Errorf("%w: %v", ErrMismatch, err)
 	}
 	if err := chain.ValidateReceipt(in.Event, &want); err != nil {
 		// 标记 failed：仅当 order 还在中间态时才翻；reorged / confirmed 不回退。
@@ -231,4 +230,52 @@ func U256(v uint64) [32]byte {
 	var b [32]byte
 	binary.BigEndian.PutUint64(b[24:], v)
 	return b
+}
+
+// buildIntentFromDB 把 purchase_intents + wallets 的行转成 chain.Intent。
+//
+// 输入：
+//   - dbCourseKey:    encode(pi.course_key,'hex') 的 64-char hex
+//   - dbTokenAddress: 0x 开头的 ERC20 地址
+//   - dbAmount:       numeric → text（decimal 字符串）
+//   - dbPriceVersion: int
+//   - intentID:       UUID
+//   - dbWalletAddress:0x 开头的钱包地址
+//
+// 任何字段转换失败 → 返回 ErrMismatch 包装错误，调用方把 order 标记 failed。
+func buildIntentFromDB(
+	dbCourseKey []byte,
+	dbTokenAddress, dbAmount string,
+	dbPriceVersion int,
+	intentID uuid.UUID,
+	dbWalletAddress string,
+) (chain.Intent, error) {
+	courseKey, err := chain.HexToBytes32(string(dbCourseKey))
+	if err != nil {
+		return chain.Intent{}, fmt.Errorf("courseKey: %w", err)
+	}
+	token := common.HexToAddress(dbTokenAddress)
+	if token == (common.Address{}) {
+		return chain.Intent{}, fmt.Errorf("token: zero address")
+	}
+	amountBig, ok := new(big.Int).SetString(dbAmount, 10)
+	if !ok {
+		return chain.Intent{}, fmt.Errorf("amount: not a decimal integer: %q", dbAmount)
+	}
+	amountBytes, err := chain.BigIntToU256(amountBig)
+	if err != nil {
+		return chain.Intent{}, fmt.Errorf("amount: %w", err)
+	}
+	wallet := common.HexToAddress(dbWalletAddress)
+	if wallet == (common.Address{}) {
+		return chain.Intent{}, fmt.Errorf("wallet: zero address")
+	}
+	return chain.Intent{
+		CourseKey:    courseKey,
+		Buyer:        wallet,
+		Token:        token,
+		Amount:       amountBytes,
+		IntentID:     chain.Bytes16FromUUID(intentID),
+		PriceVersion: U256(uint64(dbPriceVersion)), //nolint:gosec // DB 列已约束为非负 int
+	}, nil
 }
