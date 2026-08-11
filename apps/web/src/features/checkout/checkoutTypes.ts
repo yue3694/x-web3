@@ -8,6 +8,8 @@
 export type CheckoutState =
     | "idle"
     | "preparing"
+    | "checking"
+    | "approving"
     | "signing"
     | "confirming"
     | "done"

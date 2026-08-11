@@ -221,7 +221,7 @@ contract DeployCertificateNFT is Script {
         console2.log("Next steps:");
         console2.log("  1. Copy the address above into");
         console2.log("     apps/web/src/contracts/deployments.ts");
-        console2.log("     -> certificateNftDeployments.sepolia.address");
+        console2.log("     -> certificateNftDeployments.target.address");
         console2.log("  2. Run: pnpm contracts:export:abi CertificateNFT");
         console2.log("  3. Run: pnpm dev");
     }

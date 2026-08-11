@@ -11,31 +11,28 @@
  */
 
 import {useMemo, useState} from "react";
+import {formatUnits} from "viem";
 
 import {CheckoutButton} from "./CheckoutButton";
+import {OracleReferencePrice} from "./OracleReferencePrice";
 import type {CheckoutContextProps} from "./checkoutTypes";
 
 interface PriceBreakdown {
     base: string;
-    platformFee: string;
     total: string;
 }
 
 interface CheckoutPanelProps extends CheckoutContextProps {
-    /** 自定义平台费率（基点），默认 250 = 2.5%。 */
-    platformFeeBps?: number;
     /** 初始条款勾选状态（默认 false）。 */
     defaultTermsAccepted?: boolean;
 }
 
-function computeBreakdown(priceYD: string, feeBps: number): PriceBreakdown {
-    // priceYD 是 wei 字符串（base unit），前端用 bigint 计算。
+function computeBreakdown(priceYD: string): PriceBreakdown {
     const base = BigInt(priceYD);
-    const fee = (base * BigInt(feeBps)) / BigInt(10000);
+    const display = formatUnits(base, 18);
     return {
-        base: base.toString(),
-        platformFee: fee.toString(),
-        total: (base + fee).toString(),
+        base: display,
+        total: display,
     };
 }
 
@@ -48,15 +45,14 @@ export function CheckoutPanel({
     walletId,
     generateIdempotencyKey,
     onSuccess,
-    platformFeeBps = 250,
     defaultTermsAccepted = false,
 }: CheckoutPanelProps) {
     const [accepted, setAccepted] = useState(defaultTermsAccepted);
     const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
     const breakdown = useMemo(
-        () => computeBreakdown(priceYD, platformFeeBps),
-        [priceYD, platformFeeBps],
+        () => computeBreakdown(priceYD),
+        [priceYD],
     );
 
     return (
@@ -65,7 +61,7 @@ export function CheckoutPanel({
                 <div>
                     <span className="eyebrow">Checkout</span>
                     <h2 id="checkout-panel-title">Buy {courseTitle}</h2>
-                    <p>Settle with YD on Sepolia. Your enrollment unlocks immediately after on-chain confirmation.</p>
+                    <p>Settle with YD on the configured test chain. Enrollment unlocks after Worker confirmation.</p>
                 </div>
             </header>
 
@@ -74,15 +70,13 @@ export function CheckoutPanel({
                     <dt>Course price</dt>
                     <dd>{breakdown.base} YD</dd>
                 </div>
-                <div>
-                    <dt>Platform fee</dt>
-                    <dd>{breakdown.platformFee} YD</dd>
-                </div>
                 <div className="checkout-panel__total">
                     <dt>Total</dt>
                     <dd>{breakdown.total} YD</dd>
                 </div>
             </dl>
+
+            <OracleReferencePrice />
 
             <label className="checkout-panel__terms">
                 <input
@@ -115,6 +109,7 @@ export function CheckoutPanel({
                         setErrorBanner(null);
                         onSuccess?.(hash);
                     }}
+                    disabled={!accepted}
                 />
                 {!accepted ? (
                     <p className="muted" role="note">

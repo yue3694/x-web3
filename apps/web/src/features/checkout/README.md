@@ -41,8 +41,8 @@ User rejection resets to **idle** + friendly toast; we never auto-retry.
 
 ## Chain handling
 
-- Target chain = Sepolia (`sepolia.id`).
-- Wrong chain → button morphs into "Switch to Sepolia" via `useSwitchChain`.
+- Target chain comes from `VITE_TARGET_CHAIN_ID` (Anvil 31337 or Sepolia 11155111).
+- Wrong chain → button morphs into a target-chain switch action via `useSwitchChain`.
 - After switch, the buy button re-appears; user re-clicks to start intent.
 
 ## ABI assumption
@@ -70,7 +70,7 @@ credentials, X-Request-ID, and `ApiClientError` parsing.
 
 | Code | Source | UX |
 |------|--------|----|
-| `wrong-network` | `useChainId()` mismatch | Hidden buy button + "Switch to Sepolia". |
+| `wrong-network` | `useChainId()` mismatch | Hidden buy button + network switch. |
 | `user-rejected` | EIP-1193 user rejection | Reset to idle + "User rejected" toast. |
 | `abi-missing` | `market.abi.ts` empty | Red notice: contract not yet deployed. |
 | `api` | `ApiClientError` | Banner with server `message`. |

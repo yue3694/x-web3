@@ -6,6 +6,7 @@
  */
 
 import {TARGET_CHAIN_ID} from "./swapConfig";
+import {TARGET_CHAIN_NAME} from "@/chains";
 import type {SwapState, TokenSymbol} from "./swapTypes";
 
 interface SwapSubmitButtonProps {
@@ -29,6 +30,10 @@ function label(p: SwapSubmitButtonProps): string {
   switch (p.state) {
     case "quoting":
       return "Fetching quote…";
+    case "checking":
+      return "Checking balance…";
+    case "approving":
+      return `Approve ${p.tokenIn} in wallet…`;
     case "signing":
       return "Sign in wallet…";
     case "confirming":
@@ -55,12 +60,12 @@ export function SwapSubmitButton(props: SwapSubmitButtonProps) {
         disabled={props.isSwitching}
         aria-label={`Switch network to chain ${TARGET_CHAIN_ID}`}
       >
-        {props.isSwitching ? "Switching…" : "Switch to Sepolia"}
+        {props.isSwitching ? "Switching…" : `Switch to ${TARGET_CHAIN_NAME}`}
       </button>
     );
   }
 
-  const busy = props.state === "signing" || props.state === "confirming";
+  const busy = ["checking", "approving", "signing", "confirming"].includes(props.state);
 
   return (
     <button

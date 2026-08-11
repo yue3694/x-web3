@@ -47,12 +47,16 @@ export function buttonLabel(opts: {
     receiptLoading: boolean;
 }): string {
     if (!opts.isConnected) return "Connect wallet to buy";
-    if (opts.onWrongChain) return opts.isSwitching ? "Switching…" : "Switch to Sepolia";
+    if (opts.onWrongChain) return opts.isSwitching ? "Switching…" : "Switch network";
     switch (opts.state) {
         case "idle":
             return `Buy for ${opts.priceYD} YD`;
         case "preparing":
             return "Preparing intent…";
+        case "checking":
+            return "Checking YD balance…";
+        case "approving":
+            return "Approve YD in wallet…";
         case "signing":
             return "Sign in wallet…";
         case "confirming":

@@ -27,12 +27,14 @@
 package workerorder
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -67,6 +69,9 @@ func NewConfirmer(pool *pgxpool.Pool) *Confirmer { return &Confirmer{pool: pool}
 //     "submitted" / "confirming"。当 order 已经处于终态（confirmed / failed /
 //     reorged）时 Apply 不会回退；调用方应检查 state 再决定是否上报。
 func (c *Confirmer) Apply(ctx context.Context, in ApplyInput) (uuid.UUID, string, error) {
+	if in.Event == nil {
+		return uuid.Nil, "", errors.New("workerorder: event required")
+	}
 	tx, err := c.pool.Begin(ctx)
 	if err != nil {
 		return uuid.Nil, "", err
@@ -97,13 +102,30 @@ ON CONFLICT(chain_id,tx_hash,log_index) DO NOTHING`,
 	var orderID uuid.UUID
 	var userID, courseID, intentID uuid.UUID
 	var status string
-	err = tx.QueryRow(ctx, `SELECT o.id,o.user_id,o.course_id,o.intent_id,o.status
-FROM orders o WHERE o.id=$1`, in.OrderID).Scan(&orderID, &userID, &courseID, &intentID, &status)
+	var submittedTxHash []byte
+	if in.OrderID == uuid.Nil {
+		eventIntentID, parseErr := uuid.FromBytes(in.Event.IntentID[:])
+		if parseErr != nil {
+			return uuid.Nil, "", fmt.Errorf("workerorder: invalid event intentId: %w", parseErr)
+		}
+		err = tx.QueryRow(ctx, `SELECT o.id,o.user_id,o.course_id,o.intent_id,o.status,o.tx_hash
+FROM orders o WHERE o.intent_id=$1`, eventIntentID).Scan(
+			&orderID, &userID, &courseID, &intentID, &status, &submittedTxHash,
+		)
+	} else {
+		err = tx.QueryRow(ctx, `SELECT o.id,o.user_id,o.course_id,o.intent_id,o.status,o.tx_hash
+FROM orders o WHERE o.id=$1`, in.OrderID).Scan(
+			&orderID, &userID, &courseID, &intentID, &status, &submittedTxHash,
+		)
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, "", ErrOrderNotFound
 	}
 	if err != nil {
 		return uuid.Nil, "", err
+	}
+	if len(submittedTxHash) != 32 || !bytes.Equal(submittedTxHash, in.TxHash) {
+		return uuid.Nil, "", fmt.Errorf("%w: txHash", ErrMismatch)
 	}
 
 	// 3) 校验 intent 字段与事件匹配
@@ -127,6 +149,10 @@ WHERE pi.id=$1`, intentID).Scan(&dbCourseKey, &dbTokenAddress, &dbAmount, &dbPri
 	}
 	if dbChainID != in.ChainID {
 		return uuid.Nil, "", fmt.Errorf("%w: chainId", ErrMismatch)
+	}
+	if in.ContractAddress == (common.Address{}) ||
+		!strings.EqualFold(common.HexToAddress(dbMarketAddress).Hex(), in.ContractAddress.Hex()) {
+		return uuid.Nil, "", fmt.Errorf("%w: marketAddress", ErrMismatch)
 	}
 	// want 严格派生自 DB 的 intent + wallet；**绝不**从 in.Event 拷贝。
 	//
@@ -214,15 +240,16 @@ RETURNING id`, userID, courseID).Scan(&enrollmentID)
 
 // ApplyInput Confirmer.Apply 入参。
 type ApplyInput struct {
-	OrderID     uuid.UUID
-	ChainID     int64
-	TxHash      []byte // 32 bytes
-	LogIndex    int
-	BlockNumber int64
-	BlockHash   []byte // 32 bytes
-	BlockTime   time.Time
-	EventSig    [32]byte
-	Event       *chain.CoursePurchased
+	OrderID         uuid.UUID
+	ChainID         int64
+	ContractAddress common.Address
+	TxHash          []byte // 32 bytes
+	LogIndex        int
+	BlockNumber     int64
+	BlockHash       []byte // 32 bytes
+	BlockTime       time.Time
+	EventSig        [32]byte
+	Event           *chain.CoursePurchased
 }
 
 // U256 把 uint64 编码为 32 字节 big-endian（worker 内部 helper）。

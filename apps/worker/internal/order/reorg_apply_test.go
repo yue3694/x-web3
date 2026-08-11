@@ -3,12 +3,12 @@
 // F03-T17 续：worker Confirmer + manual rewind 端到端集成测试。
 //
 // 覆盖 DoD「Worker reorg / 重复消费 / 漏块全部测试覆盖」里的剩余两条：
-//   1. admin 手动 rewind → 受影响 order 标 reorged + failure_code=EVENT_REORGED
-//      + chain_reorgs 新增一行 + enrollment 仍唯一；
-//   2. rewind 之后再次投递同一 (chain_id, tx_hash, log_index) 事件：
-//      - chain_events 唯一约束幂等命中；
-//      - order 状态保持 reorged（不再被 Apply 推回 confirmed），
-//        因为 Apply 的 WHERE 仅匹配 status IN ('submitted','confirming')。
+//  1. admin 手动 rewind → 受影响 order 标 reorged + failure_code=EVENT_REORGED
+//     + chain_reorgs 新增一行 + enrollment 仍唯一；
+//  2. rewind 之后再次投递同一 (chain_id, tx_hash, log_index) 事件：
+//     - chain_events 唯一约束幂等命中；
+//     - order 状态保持 reorged（不再被 Apply 推回 confirmed），
+//     因为 Apply 的 WHERE 仅匹配 status IN ('submitted','confirming')。
 //
 // 跑法：go test -tags integration -run TestApply_AfterRewind ./internal/order/
 package workerorder_test
@@ -111,13 +111,13 @@ type poolLike interface {
 }
 
 // TestApply_AfterRewind_OrderStaysReorged 覆盖 DoD「重复消费」与「reorg 链路」：
-//   1) seed 完整 fixture，order 落到 'submitted'；
-//   2) Apply 一次 → confirmed，enrollment 写入；
-//   3) 模拟 admin 手动 rewind 到 block 1000（含该 order）；
-//   4) 验证 orders.status='reorged' / failure_code='EVENT_REORGED'；
-//   5) 验证 chain_reorgs 有 1 行；
-//   6) 再次投递相同 ApplyInput → 状态保持 reorged（不被推回 confirmed）；
-//   7) 验证 enrollment 行数仍为 1（enrollment 唯一约束）。
+//  1. seed 完整 fixture，order 落到 'submitted'；
+//  2. Apply 一次 → confirmed，enrollment 写入；
+//  3. 模拟 admin 手动 rewind 到 block 1000（含该 order）；
+//  4. 验证 orders.status='reorged' / failure_code='EVENT_REORGED'；
+//  5. 验证 chain_reorgs 有 1 行；
+//  6. 再次投递相同 ApplyInput → 状态保持 reorged（不被推回 confirmed）；
+//  7. 验证 enrollment 行数仍为 1（enrollment 唯一约束）。
 func TestApply_AfterRewind_OrderStaysReorged(t *testing.T) {
 	pool := itPool(t)
 	// 清掉同 (chain_id, common_block, reason) 的旧行：之前测试运行 / 调试
@@ -132,9 +132,9 @@ func TestApply_AfterRewind_OrderStaysReorged(t *testing.T) {
 			`DELETE FROM chain_reorgs WHERE chain_id=$1 AND common_block=$2 AND reason='manual_rewind'`,
 			testChainID, int64(1000))
 	})
-	orderID, userID, courseID, _, txHash, _, _ := seedConfirmedFixture(t, pool)
+	orderID, userID, courseID, intentID, txHash, market, _ := seedConfirmedFixture(t, pool)
 	buyer := common.HexToAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
-	in := applyInputFromFixture(orderID, courseID, txHash, buyer)
+	in := applyInputFromFixture(orderID, courseID, intentID, txHash, market, buyer)
 
 	// 1) 第一次 Apply → confirmed
 	confirmer := workerorder.NewConfirmer(pool)
@@ -213,13 +213,13 @@ WHERE chain_id=$1 AND common_block=1000 AND reason='manual_rewind'`,
 // chain_events 应有 2 行；order 仍 confirmed；enrollment 仅 1 条。
 func TestApply_ReplayedEventFromDifferentLogIndex_NotBlocked(t *testing.T) {
 	pool := itPool(t)
-	orderID, userID, courseID, _, txHash, _, _ := seedConfirmedFixture(t, pool)
+	orderID, userID, courseID, intentID, txHash, market, _ := seedConfirmedFixture(t, pool)
 	buyer := common.HexToAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
 
 	confirmer := workerorder.NewConfirmer(pool)
 
 	// 第一次 Apply：log_index=0
-	in0 := applyInputFromFixture(orderID, courseID, txHash, buyer)
+	in0 := applyInputFromFixture(orderID, courseID, intentID, txHash, market, buyer)
 	enrollID, state, err := confirmer.Apply(context.Background(), in0)
 	if err != nil {
 		t.Fatalf("first Apply (log_index=0): %v", err)
@@ -232,7 +232,7 @@ func TestApply_ReplayedEventFromDifferentLogIndex_NotBlocked(t *testing.T) {
 	}
 
 	// 第二次 Apply：同一 tx_hash，log_index=1 → 应被视作新事件
-	in1 := applyInputFromFixture(orderID, courseID, txHash, buyer)
+	in1 := applyInputFromFixture(orderID, courseID, intentID, txHash, market, buyer)
 	in1.LogIndex = 1
 	_, state2, err := confirmer.Apply(context.Background(), in1)
 	if err != nil {

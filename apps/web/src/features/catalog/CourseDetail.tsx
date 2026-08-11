@@ -103,11 +103,11 @@ export function CourseDetail({courseId}: CourseDetailProps) {
     const enrolled = data?.enrolled === true;
 
     // wallet 选择：primary wallet 必须与 chain 匹配；否则从同一 chain 的 wallet 里挑第一个。
-    const marketChainId = courseMarketDeployments.sepolia.chainId;
+    const marketChainId = courseMarketDeployments.target.chainId;
     const walletForChain = profile?.wallets.find((w) => w.chainId === marketChainId) ?? null;
 
     const priceYD = course ? priceMinorToYDWei(course.priceMinor) : "0";
-    const marketAddress = courseMarketDeployments.sepolia.address;
+    const marketAddress = courseMarketDeployments.target.address;
 
     return (
         <div className="course-detail-page page-stack" aria-labelledby="course-detail-title">

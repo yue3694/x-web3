@@ -6,8 +6,9 @@
 ## 0. 前置
 
 ```bash
-# 1) PostgreSQL + Redis + Anvil
-docker compose -f deploy/docker-compose.yml up -d redis anvil postgres
+# 1) Redis + Anvil（PostgreSQL 按 deploy/docker-compose.yml 注释使用本机实例，
+#    或先自行取消 postgres service 注释）
+docker compose -f deploy/docker-compose.yml up -d redis anvil
 
 # 2) 数据库 migrate
 cd database && ./migrate.sh up && cd ..
@@ -16,6 +17,8 @@ cd database && ./migrate.sh up && cd ..
 cp .env.example .env
 #   - ANVIL_RPC_URL=http://localhost:8545
 #   - WORKER_RPC_URLS=http://localhost:8545
+#   - WORKER_CHAIN_ID=31337 / CHAIN_CONFIRMATION_DEPTH=1
+#   - VITE_TARGET_CHAIN_ID=31337 / VITE_RPC_URL=http://localhost:8545
 #   - SIGNER_DRIVER=anvil
 #   - CERT_NFT_ADDRESS=0x...（见步骤 2）
 ```
@@ -31,21 +34,43 @@ anvil --chain-id 31337 --block-time 1
 ## 2. 部署合约到 Anvil
 
 ```bash
-# CourseMarket（学生买课入口）
-cd packages/contracts
-SIGNER_DRIVER=anvil CERT_NFT_ADDRESS=... PAYMENT_TOKEN_ADDRESS=... \
-  forge script script/DeployCourseMarket.s.sol:DeployCourseMarket \
-    --rpc-url http://localhost:8545 --broadcast
-cd -
+# 统一使用 Anvil 默认账户 #0；仅限本地测试。
+export DEPLOYER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+export EXPECTED_CHAIN_ID=31337
+export ANVIL_RPC_URL=http://127.0.0.1:8545
+export TEST_OWNER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
-# CertificateNFT（证书 NFT）
-SIGNER_DRIVER=anvil CERT_NFT_ADDRESS=... \
+# 1) YDToken
+cd packages/contracts
+YD_TREASURY_MULTISIG=$TEST_OWNER YD_PAUSER_MULTISIG=$TEST_OWNER \
+  forge script script/DeployYDToken.s.sol:DeployYDToken \
+  --rpc-url $ANVIL_RPC_URL --broadcast
+
+# 2) CourseMarket：先部署空市场，课程发布后再 configureCourse
+COURSE_MARKET_OWNER=$TEST_OWNER \
+  forge script script/DeployCourseMarket.s.sol:DeployCourseMarket \
+  --rpc-url $ANVIL_RPC_URL --broadcast
+
+# 3) CertificateNFT
+CERT_NFT_ADMIN_ADDRESS=$TEST_OWNER CERT_NFT_MINTER_ADDRESS=$TEST_OWNER \
   forge script script/DeployCertificateNFT.s.sol:DeployCertificateNFT \
-    --rpc-url http://localhost:8545 --broadcast
+  --rpc-url $ANVIL_RPC_URL --broadcast
+
+# 4) Mock feed + guarded oracle adapter
+pnpm deploy:oracle:anvil
+cd -
 ```
 
 记下输出里的 `CourseMarket deployed at: 0x...` 与 `CertificateNFT deployed at: 0x...`，
-填到 `.env` 的 `VITE_COURSE_MARKET_ADDRESS` / `CERT_NFT_ADDRESS`。
+把四个输出地址填入：
+
+- `VITE_YD_TOKEN_ADDRESS`
+- `VITE_COURSE_MARKET_ADDRESS`
+- `CERT_NFT_ADDRESS` 与 `VITE_CERTIFICATE_NFT_ADDRESS`
+- `VITE_PRICE_ORACLE_ADDRESS`
+
+Worker 同时设置 `WORKER_CHAIN_ID=31337`、`CHAIN_CONFIRMATION_DEPTH=1`。
+前端设置 `VITE_TARGET_CHAIN_ID=31337`、`VITE_RPC_URL=http://127.0.0.1:8545`。
 
 ## 3. 起 worker / api / web
 
@@ -66,9 +91,12 @@ treasury_monitor_disabled_empty hint="设置 ..."
 ## 4. Happy Path
 
 1. 浏览器开 http://localhost:5173，登录（Privy dev stub 已开）
-2. 选课 → 点 Buy → 钱包签名 `buyCourse(bytes32 courseKey, uint256 amount, bytes16 intentId)`
-3. 等 5–10 秒（worker 拉到 CoursePurchased log → confirmer.Apply → enrollments INSERT）
-4. 回到 My Orders → order.status = `confirmed`，enrollmentId 可见
+2. 发布课程后，把数据库 `course_prices` 和链上 `configureCourse` 配成相同的
+   `courseKey / YD address / amount / priceVersion`。
+3. 选课 → 点 Buy；首次会先签 `YD.approve`，再签
+   `buyCourse(bytes32 courseKey, uint256 amount, bytes16 intentId)`。
+4. 等 2–5 秒（worker 拉到 CoursePurchased log → confirmer.Apply → enrollments INSERT）。
+5. 回到 My Orders → `order.status=confirmed`，`enrollmentId` 可见。
 
 ## 5. 数据库断言
 

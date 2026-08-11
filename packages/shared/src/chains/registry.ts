@@ -1,7 +1,7 @@
 /**
  * 链 registry：单一来源，避免在组件/合约脚本硬编码。
  *
- * 注：MVP 仅 Sepolia。其它 chain 是占位，等 OQ-001 评审后补齐。
+ * 测试阶段支持本地 Anvil 与 Sepolia；不包含任何正式链。
  */
 
 export type ChainNamespace = 'eip155';
@@ -20,6 +20,17 @@ export interface ChainInfo {
 }
 
 export const CHAINS: Record<number, ChainInfo> = {
+  31337: {
+    namespace: 'eip155',
+    chainId: 31337,
+    name: 'Anvil',
+    shortName: 'anvil',
+    rpcEnvVar: 'VITE_ANVIL_RPC_URL',
+    blockExplorer: '',
+    nativeToken: 'ETH',
+    isTestnet: true,
+    confirmationDepth: 1,
+  },
   11155111: {
     namespace: 'eip155',
     chainId: 11155111,

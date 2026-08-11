@@ -16,6 +16,7 @@ import {useAccount, useChainId, useSwitchChain} from "wagmi";
 
 import {quoterAbi} from "@/contracts/quoter.abi";
 import {swapRouterAbi} from "@/contracts/swap.abi";
+import {TARGET_CHAIN_NAME} from "@/chains";
 
 import {SlippageControl} from "./SlippageControl";
 import {SwapAmountFields} from "./SwapAmountFields";
@@ -80,7 +81,7 @@ export function SwapCard({defaultTokenIn = "YD", onSuccess}: SwapCardProps) {
   const impactBlocked = isPriceImpactBlocked(quote?.priceImpactPct ?? null);
   const slippageBlocked = isSlippageRejected(slippageBps);
   const notDeployed = !swapRouterAddress || !inMeta.address || !outMeta.address;
-  const busy = execute.state === "signing" || execute.state === "confirming";
+  const busy = ["checking", "approving", "signing", "confirming"].includes(execute.state);
   // 写链路优先：签名/确认中不能被 quoting 覆盖。
   const state: SwapState = execute.state === "idle" && quoting ? "quoting" : execute.state;
 
@@ -93,9 +94,9 @@ export function SwapCard({defaultTokenIn = "YD", onSuccess}: SwapCardProps) {
   const onSwap = () => {
     execute.setError(null);
     if (!isConnected || !address) return execute.setError("Connect a wallet first.");
-    if (onWrongChain) return execute.setError("Switch to Sepolia to continue.");
+    if (onWrongChain) return execute.setError(`Switch to ${TARGET_CHAIN_NAME} to continue.`);
     if (notDeployed || !inMeta.address || !outMeta.address) {
-      return execute.setError("Swap contracts are not configured on Sepolia yet.");
+      return execute.setError(`Swap contracts are not configured on ${TARGET_CHAIN_NAME} yet.`);
     }
     if (!amountIn) return execute.setError("Enter an amount greater than zero.");
     if (!quote) return execute.setError("No quote available yet.");
@@ -114,7 +115,7 @@ export function SwapCard({defaultTokenIn = "YD", onSuccess}: SwapCardProps) {
 
   // 三类错误共用一条 banner 通道，按严重程度从配置问题到交易失败排列。
   const notices = [
-    notDeployed ? "Swap router / token addresses are not configured for Sepolia yet." : null,
+    notDeployed ? `Swap router / token addresses are not configured for ${TARGET_CHAIN_NAME} yet.` : null,
     quoteError ? `Quote failed: ${quoteError.message}` : null,
     execute.error,
   ].filter((n): n is string => n !== null);
@@ -127,7 +128,7 @@ export function SwapCard({defaultTokenIn = "YD", onSuccess}: SwapCardProps) {
           <h2 id="swap-card-title">
             {tokenIn} → {tokenOut}
           </h2>
-          <p>Uniswap V3 · {DEFAULT_FEE_TIER / 10_000}% pool · Sepolia</p>
+          <p>Uniswap V3 · {DEFAULT_FEE_TIER / 10_000}% pool · {TARGET_CHAIN_NAME}</p>
         </div>
       </header>
 

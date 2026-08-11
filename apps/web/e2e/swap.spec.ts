@@ -93,7 +93,7 @@ async function stubJsonRpc(page: Page) {
             }
             // YD.balanceOf / YD.allowance → 大数（mock 已无限授权）
             if (c.to?.toLowerCase() === YD && (c.data?.replace(/^0x/, "").startsWith("70a08231") || c.data?.replace(/^0x/, "").startsWith("dd62ed3e"))) {
-                result = "0x" + BigInt(10n ** 24n).toString(16);
+                result = "0x" + BigInt(10n ** 24n).toString(16).padStart(64, "0");
             }
           }
           if (method === "eth_getTransactionReceipt") result = {

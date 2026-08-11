@@ -33,7 +33,7 @@ const OUT_DIR = resolve(root, "apps/web/src/contracts");
 const REQUESTED = process.argv.slice(2);
 const CONTRACTS = REQUESTED.length > 0
     ? REQUESTED
-    : ["Counter", "Notepad", "CourseMarket", "YDToken", "CertificateNFT"];
+    : ["Counter", "Notepad", "CourseMarket", "YDToken", "CertificateNFT", "ChainlinkPriceOracle"];
 
 async function exists(path) {
     try {

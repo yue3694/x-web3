@@ -6,6 +6,7 @@ import {RequirePermission} from "@/auth/RequirePermission";
 import {SignInButton} from "@/auth/SignInButton";
 import {useSession} from "@/auth/SessionContext";
 import {UserMenu} from "@/features/account/UserMenu";
+import {TARGET_CHAIN_ID, TARGET_CHAIN_NAME} from "@/chains";
 
 const LINKS = [
     {to: "/courses", label: "Courses"},
@@ -17,7 +18,7 @@ function Brand() {
     return (
         <Link to="/" className="nav__brand" aria-label="Web3 University home">
             <span className="nav__mark" aria-hidden="true">◆</span>
-            <span className="nav__brand-text"><span className="nav__brand-name">WEB3 UNIVERSITY</span><span className="nav__brand-sub">Sepolia · v0.1</span></span>
+            <span className="nav__brand-text"><span className="nav__brand-name">WEB3 UNIVERSITY</span><span className="nav__brand-sub">{TARGET_CHAIN_NAME} · v0.1</span></span>
         </Link>
     );
 }
@@ -27,8 +28,8 @@ function WalletChip() {
         <ConnectKitButton.Custom>
             {({isConnected, isConnecting, show, address, truncatedAddress, chain}) => {
                 if (!isConnected) return <button type="button" className="btn btn--primary nav__cta" disabled={isConnecting} onClick={show}>{isConnecting ? "Linking…" : "Connect wallet"}</button>;
-                const wrongChain = chain?.id !== undefined && chain.id !== 11155111;
-                return <button type="button" className={`wallet-chip${wrongChain ? " wallet-chip--warn" : ""}`} onClick={show} aria-label={wrongChain ? "Wrong network, switch to Sepolia" : "Manage wallet"}><span className="wallet-chip__dot" aria-hidden="true" /><span className="wallet-chip__net">{chain?.name ?? "Unknown"}</span><span className="wallet-chip__addr">{truncatedAddress ?? address}</span></button>;
+                const wrongChain = chain?.id !== undefined && chain.id !== TARGET_CHAIN_ID;
+                return <button type="button" className={`wallet-chip${wrongChain ? " wallet-chip--warn" : ""}`} onClick={show} aria-label={wrongChain ? `Wrong network, switch to ${TARGET_CHAIN_NAME}` : "Manage wallet"}><span className="wallet-chip__dot" aria-hidden="true" /><span className="wallet-chip__net">{chain?.name ?? "Unknown"}</span><span className="wallet-chip__addr">{truncatedAddress ?? address}</span></button>;
             }}
         </ConnectKitButton.Custom>
     );

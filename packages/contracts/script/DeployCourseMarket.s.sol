@@ -20,11 +20,10 @@
 //    3) 仅模拟：省略 --broadcast。
 //
 //  两种配置模式：
-//    Mode A（默认）：仅读取 PAYMENT_TOKEN_ADDRESS env，写一个 priceVersion=1
-//                    的占位 course；正式课程由后端签名写入。
+//    Mode A（默认）：只部署空的 CourseMarket；课程随后由 owner 配置。
 //    Mode B：通过 COURSES_CONFIG_PATH 指向 JSON 文件，部署后逐条
 //            configureCourse。Mode B 优先级更高：只要设置了
-//            COURSES_CONFIG_PATH，PAYMENT_TOKEN_ADDRESS 即被忽略。
+//            COURSES_CONFIG_PATH。
 //
 //  JSON 形状（数组，每条字段：courseKey / token / amount / priceVersion）：
 //    [
@@ -44,7 +43,7 @@ import {Script, console2} from "forge-std/Script.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {CourseMarket} from "../src/CourseMarket.sol";
 
-/// @notice 部署 CourseMarket，支持 Mode A（token-only）与 Mode B（JSON 配置）。
+/// @notice 部署 CourseMarket，支持 Mode A（deploy-only）与 Mode B（JSON 配置）。
 /// @dev    JSON 解析的纯逻辑由 `parseCoursesConfig` 暴露，便于单测。
 contract DeployCourseMarket is Script {
     using stdJson for string;
@@ -98,8 +97,9 @@ contract DeployCourseMarket is Script {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
 
-        // Mode A：PAYMENT_TOKEN_ADDRESS 单一占位 course
-        address paymentToken = vm.envOr("PAYMENT_TOKEN_ADDRESS", address(0));
+        // 本地默认 deployer；共享测试链建议显式传 treasury / Safe。
+        address owner = vm.envOr("COURSE_MARKET_OWNER", deployer);
+        require(owner != address(0), "DeployCourseMarket: zero owner");
         // Mode B：JSON 配置文件
         string memory configPath = vm.envOr("COURSES_CONFIG_PATH", string(""));
         bool useJsonMode = bytes(configPath).length > 0;
@@ -112,7 +112,7 @@ contract DeployCourseMarket is Script {
         }
 
         vm.startBroadcast(deployerPrivateKey);
-        CourseMarket market = new CourseMarket(deployer);
+        CourseMarket market = new CourseMarket(owner);
 
         uint256 configured;
         if (useJsonMode) {
@@ -121,26 +121,14 @@ contract DeployCourseMarket is Script {
                 market.configureCourse(c.courseKey, c.token, c.amount, c.priceVersion);
                 configured++;
             }
-        } else if (paymentToken != address(0)) {
-            // 占位 courseKey = bytes32(0)、amount = 0：仅为让 `getConfig(bytes32(0))`
-            // 在生产环境返回一个有效 (token, amount=0, version=1) 条目，方便后端
-            // worker 用同一调用探测"市场是否已部署 + payment token 是什么"。
-            // 任何对 bytes32(0) 的真实 buyCourse 都会被 CourseMarket.AmountMismatch
-            // revert（amount==0 与客户端 amount>0 不匹配），不会造成资金损失。
-            // 后端 worker 真正使用的课程 key 由 `courseKey` 表（API 业务层）维护，
-            // 不依赖该占位条目；后续运维 `configureCourse(realKey, ...)` 即可覆盖。
-            market.configureCourse(bytes32(0), paymentToken, 0, 1);
-            configured = 1;
         }
         vm.stopBroadcast();
 
         // ========== Console summary ==========
         console2.log("CourseMarket deployed at:", address(market));
-        console2.log("Owner:                  ", deployer);
+        console2.log("Owner:                  ", owner);
         console2.log("Network (chainid):      ", block.chainid);
-        console2.log(
-            "Mode:                   ", useJsonMode ? "B (JSON)" : "A (PAYMENT_TOKEN_ADDRESS)"
-        );
+        console2.log("Mode:                   ", useJsonMode ? "B (JSON)" : "A (deploy only)");
         console2.log("Courses configured:     ", configured);
         if (configured > 0) {
             console2.log("---------------------------------------------------------------");
@@ -162,12 +150,6 @@ contract DeployCourseMarket is Script {
                         )
                     );
                 }
-            } else {
-                console2.log(
-                    string.concat(
-                        vm.toString(bytes32(0)), " | ", vm.toString(paymentToken), " | 0 | 1"
-                    )
-                );
             }
             console2.log("---------------------------------------------------------------");
         }
@@ -175,7 +157,7 @@ contract DeployCourseMarket is Script {
         console2.log("Next steps:");
         console2.log("  1. Copy the address above into");
         console2.log("     apps/web/src/contracts/deployments.ts");
-        console2.log("     -> courseMarketDeployments.sepolia.address");
+        console2.log("     -> courseMarketDeployments.target.address");
         console2.log("  2. Run: pnpm contracts:export:abi CourseMarket");
         console2.log("  3. Run: pnpm dev");
     }

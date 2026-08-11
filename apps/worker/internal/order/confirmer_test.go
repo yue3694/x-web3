@@ -3,10 +3,10 @@
 // F03-T11：worker Confirmer 集成测试。
 //
 // 覆盖 DoD 场景：
-//   1. 假 tx hash 提交 → worker 拒绝（orders.status = 'failed'）。
-//   2. CoursePurchased 事件里的 buyer 与 intent 不一致 → 不创建 enrollment；
-//      orders.status = 'failed', failure_code = 'RECEIPT_MISMATCH'。
-//   3. 同一 (chain_id, tx_hash, log_index) 重复投递 → enrollment 仅一条。
+//  1. 假 tx hash 提交 → worker 拒绝（orders.status = 'failed'）。
+//  2. CoursePurchased 事件里的 buyer 与 intent 不一致 → 不创建 enrollment；
+//     orders.status = 'failed', failure_code = 'RECEIPT_MISMATCH'。
+//  3. 同一 (chain_id, tx_hash, log_index) 重复投递 → enrollment 仅一条。
 //
 // 入参：
 //   - DATABASE_URL_TEST：指向已应用 0001~0007 migrations 的 PG。
@@ -19,6 +19,7 @@ package workerorder_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -141,24 +142,27 @@ VALUES($1, $2, $3, $4, 'submitted', $5, $6, 1000, 0, decode('01','hex'))`,
 
 // applyInputFromFixture 把 seed 出来的 order 转成 Confirmer.ApplyInput，
 // 默认 buyer 跟 intent 一致。buyerOverride 用于 mismatch 场景。
-func applyInputFromFixture(orderID uuid.UUID, courseID uuid.UUID, txHash []byte, buyer common.Address) workerorder.ApplyInput {
+func applyInputFromFixture(orderID uuid.UUID, courseID uuid.UUID, intentID uuid.UUID, txHash []byte, market common.Address, buyer common.Address) workerorder.ApplyInput {
 	courseKey := courseKeyForTest(courseID)
 	var courseKeyArr [32]byte
 	copy(courseKeyArr[:], courseKey)
 	return workerorder.ApplyInput{
-		OrderID:     orderID,
-		ChainID:     testChainID,
-		TxHash:      txHash,
-		LogIndex:    0,
-		BlockNumber: 1000,
-		BlockHash:   []byte{0x01},
-		BlockTime:   time.Now().UTC(),
-		EventSig:    chain.CoursePurchasedTopic,
+		OrderID:         orderID,
+		ChainID:         testChainID,
+		ContractAddress: market,
+		TxHash:          txHash,
+		LogIndex:        0,
+		BlockNumber:     1000,
+		BlockHash:       []byte{0x01},
+		BlockTime:       time.Now().UTC(),
+		EventSig:        chain.CoursePurchasedTopic,
 		Event: &chain.CoursePurchased{
-			CourseKey: courseKeyArr,
-			Buyer:     buyer,
-			Token:     common.HexToAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8"),
-			Amount:    workerorder.U256(1000000),
+			CourseKey:    courseKeyArr,
+			Buyer:        buyer,
+			Token:        common.HexToAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8"),
+			Amount:       workerorder.U256(1000000),
+			IntentID:     chain.Bytes16FromUUID(intentID),
+			PriceVersion: workerorder.U256(1),
 		},
 	}
 }
@@ -203,9 +207,9 @@ func readOrderStatus(t *testing.T, pool *pgxpool.Pool, orderID uuid.UUID) (strin
 // 给后面两个 case 留一份"绿色"基线（无失败即视为通过）。
 func TestConfirmer_HappyPath_Smoke(t *testing.T) {
 	pool := itPool(t)
-	orderID, userID, courseID, _, txHash, _, _ := seedConfirmedFixture(t, pool)
+	orderID, userID, courseID, intentID, txHash, market, _ := seedConfirmedFixture(t, pool)
 	buyer := common.HexToAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
-	in := applyInputFromFixture(orderID, courseID, txHash, buyer)
+	in := applyInputFromFixture(uuid.Nil, courseID, intentID, txHash, market, buyer)
 	c := workerorder.NewConfirmer(pool)
 	enrollID, state, err := c.Apply(context.Background(), in)
 	if err != nil {
@@ -241,9 +245,9 @@ func TestConfirmer_HappyPath_Smoke(t *testing.T) {
 // 防御重复事件 delivery 的能力。
 func TestConfirmer_DuplicateTxHash(t *testing.T) {
 	pool := itPool(t)
-	orderID, userID, courseID, _, txHash, _, _ := seedConfirmedFixture(t, pool)
+	orderID, userID, courseID, intentID, txHash, market, _ := seedConfirmedFixture(t, pool)
 	buyer := common.HexToAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
-	in := applyInputFromFixture(orderID, courseID, txHash, buyer)
+	in := applyInputFromFixture(orderID, courseID, intentID, txHash, market, buyer)
 	c := workerorder.NewConfirmer(pool)
 
 	// 第一次：happy path。
@@ -286,10 +290,10 @@ func TestConfirmer_DuplicateTxHash(t *testing.T) {
 // 不写 enrollment。
 func TestConfirmer_WrongBuyer(t *testing.T) {
 	pool := itPool(t)
-	orderID, userID, courseID, _, txHash, _, _ := seedConfirmedFixture(t, pool)
+	orderID, userID, courseID, intentID, txHash, market, _ := seedConfirmedFixture(t, pool)
 	// 故意用另一个地址（与 seed wallet 不同）。
 	wrongBuyer := common.HexToAddress("0xdead000000000000000000000000000000000001")
-	in := applyInputFromFixture(orderID, courseID, txHash, wrongBuyer)
+	in := applyInputFromFixture(orderID, courseID, intentID, txHash, market, wrongBuyer)
 	c := workerorder.NewConfirmer(pool)
 
 	_, state, err := c.Apply(context.Background(), in)
@@ -315,5 +319,27 @@ func TestConfirmer_WrongBuyer(t *testing.T) {
 	// chain_events 仍被记录（用于审计 / 重放），但 enrollment 不创建。
 	if n := countChainEvents(t, pool, testChainID, txHash); n != 1 {
 		t.Errorf("chain_events = %d, want 1 (audit row still recorded)", n)
+	}
+}
+
+// TestConfirmer_WrongMarket ensures a lookalike event emitted by another contract
+// cannot confirm an order, even when all event fields match the intent.
+func TestConfirmer_WrongMarket(t *testing.T) {
+	pool := itPool(t)
+	orderID, userID, courseID, intentID, txHash, market, _ := seedConfirmedFixture(t, pool)
+	buyer := common.HexToAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+	in := applyInputFromFixture(uuid.Nil, courseID, intentID, txHash, market, buyer)
+	in.ContractAddress = common.HexToAddress("0xdead000000000000000000000000000000000002")
+
+	_, _, err := workerorder.NewConfirmer(pool).Apply(context.Background(), in)
+	if !errors.Is(err, workerorder.ErrMismatch) {
+		t.Fatalf("Apply error = %v, want ErrMismatch", err)
+	}
+	status, _ := readOrderStatus(t, pool, orderID)
+	if status != "submitted" {
+		t.Fatalf("order status = %q, want submitted", status)
+	}
+	if n := countEnrollments(t, pool, userID, courseID); n != 0 {
+		t.Fatalf("enrollments = %d, want 0", n)
 	}
 }

@@ -1,6 +1,6 @@
 # Swap (F05)
 
-YD ↔ USDC exchange on **Uniswap V3 / Sepolia**. Quotes come from `QuoterV2`
+YD ↔ USDC exchange on **Uniswap V3 / the configured test chain**. Quotes come from `QuoterV2`
 (`eth_call`, no state), swaps go through `SwapRouter.exactInputSingle` with an
 `amountOutMinimum` + `deadline` guard.
 
@@ -26,7 +26,7 @@ YD ↔ USDC exchange on **Uniswap V3 / Sepolia**. Quotes come from `QuoterV2`
 ```
 idle ──quote in flight──▶ quoting ──▶ idle
   │
-  └─click Swap─▶ signing ─▶ confirming ─▶ done
+  └─click Swap─▶ checking ─▶ approving? ─▶ signing ─▶ confirming ─▶ done
                     │            │
                     │            └──▶ failed   (receipt error / reverted)
                     └──▶ idle    (user rejected — not an error)
@@ -37,6 +37,9 @@ idle ──quote in flight──▶ quoting ──▶ idle
   (`Price impact too high` / `Slippage too high`) when a guard trips.
 - **quoting** — `useSwapQuote` is loading. Only the *main* quote counts; the
   probe quote loading never shows a spinner (it only feeds the badge).
+- **checking** — reads the input-token balance and router allowance.
+- **approving** — when allowance is insufficient, waits for an exact-amount
+  ERC-20 approval receipt before submitting the swap.
 - **signing** — wallet prompt is open (`writeContractAsync`).
 - **confirming** — tx broadcast; `useWaitForTransactionReceipt` is polling.
 - **done** — receipt landed; `minReceived` vs `actualReceived` rendered.
@@ -141,13 +144,13 @@ either ABI is empty — same guard as `CheckoutButton`.
 
 | Value | Source |
 |-------|--------|
-| YD | `ydTokenDeployments.sepolia` (`deployments.ts`) |
+| YD | `ydTokenDeployments.target` (`deployments.ts`) |
 | USDC | `VITE_USDC_ADDRESS` ⚠️ temporary |
 | SwapRouter | `VITE_SWAP_ROUTER_ADDRESS` ⚠️ temporary |
 | QuoterV2 | `VITE_QUOTER_ADDRESS` ⚠️ temporary |
 
 ⚠️ **`deployments.ts` only has `ydTokenDeployments` today.** The spec calls for
-`swapRouterDeployments.sepolia` / `quoterDeployments.sepolia`, but that file was
+target-chain router/quoter deployment slots, but that file was
 out of scope for this change, so `swapConfig.ts` reads the other three from env
 using the same `optionalAddress` validation. Once the deployment slots exist,
 delete the `envAddress` branch in `swapConfig.ts` and import them directly.
@@ -160,14 +163,8 @@ submit button disabled — it never sends a transaction to `undefined`.
 - Register `swapRouterDeployments` / `quoterDeployments` / `usdcDeployments` in
   `deployments.ts`; drop `envAddress` from `swapConfig.ts`.
 - Replace both ABI stubs with the real artifacts (keep the two notes above).
-- **ERC-20 approval is not implemented.** `exactInputSingle` pulls `tokenIn` via
-  `transferFrom`, so a swap reverts unless the router already has an allowance.
-  An `allowance` read + `approve` step (or Permit2) is required before this is
-  usable end-to-end.
 - Fee tier is hard-coded to 0.3%; a real router would quote across
   500/3000/10000 and pick the best.
-- No balance check — the button lets you submit more than you hold and the tx
-  reverts on-chain.
 - No `vitest` coverage yet; `swapUtils.ts` / `swapErrors.ts` are pure and were
   written to be directly testable.
 - Styles assume `.swap-card__*` / `.slippage-control__*` /

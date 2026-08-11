@@ -330,13 +330,14 @@ func (indexerLogDecoder) Decode(_ context.Context, chainID int64, _ *indexer.Hea
 	// Confirmer.ApplyInput 用 Event 字段承载解码后的 CoursePurchased；
 	// CourseKey / Token / IntentID 等都在 decoded 里。
 	in := workerorder.ApplyInput{
-		ChainID:    chainID,
-		TxHash:     rec.TxHash.Bytes(),
-		LogIndex:   int(rec.LogIndex),
-		BlockNumber: int64(rec.BlockNumber),
-		BlockHash:  rec.BlockHash.Bytes(),
-		EventSig:   chain.CoursePurchasedTopic,
-		Event:      decoded,
+		ChainID:         chainID,
+		ContractAddress: rec.Address,
+		TxHash:          rec.TxHash.Bytes(),
+		LogIndex:        int(rec.LogIndex),
+		BlockNumber:     int64(rec.BlockNumber),
+		BlockHash:       rec.BlockHash.Bytes(),
+		EventSig:        chain.CoursePurchasedTopic,
+		Event:           decoded,
 	}
 	return []workerorder.ApplyInput{in}, true, nil
 }
@@ -530,11 +531,11 @@ func splitCSV(v string) []string {
 //   - CERT_NFT_ADDRESS 环境变量非零（合约地址必填）
 //
 // 装配链路：
-//   1. SignerConfigFromEnv(chainID) — driver / contract / KMS key
-//   2. Params = ChainTxParams(rpcPool) — 实时 nonce（PR-A4）
-//   3. NewMintSigner — driver 工厂
-//   4. rpcPool.Primary().RawRPC() → ethclient.NewClient → NewEthClientAdapter
-//   5. NewConsumer — DLQ 默认 PG、ConfirmDepth = confirmDepth
+//  1. SignerConfigFromEnv(chainID) — driver / contract / KMS key
+//  2. Params = ChainTxParams(rpcPool) — 实时 nonce（PR-A4）
+//  3. NewMintSigner — driver 工厂
+//  4. rpcPool.Primary().RawRPC() → ethclient.NewClient → NewEthClientAdapter
+//  5. NewConsumer — DLQ 默认 PG、ConfirmDepth = confirmDepth
 //
 // 返回 (*Consumer, *ConsumerMetrics)。metrics 用于 metrics.Sources.CertConsumer。
 // 调用方把 Run 放到 goroutine 里跑；本函数不阻塞。

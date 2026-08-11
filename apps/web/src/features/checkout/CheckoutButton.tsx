@@ -1,7 +1,7 @@
 /**
  * CheckoutButton — F03 课程购买主按钮。
  *
- * 状态机：idle → preparing → signing → confirming → done | failed
+ * 状态机：idle → preparing → checking → approving? → signing → confirming → done | failed
  *
  * 流程：
  *   1. 校验 chainId（错链就调 useSwitchChain 提示切链）。
@@ -18,18 +18,18 @@
  */
 
 import {useEffect, useRef, useState} from "react";
-import {sepolia} from "wagmi/chains";
-import {useAccount, useChainId, useSwitchChain, useWaitForTransactionReceipt, useWriteContract} from "wagmi";
+import {useAccount, useChainId, usePublicClient, useSwitchChain, useWaitForTransactionReceipt, useWriteContract} from "wagmi";
+import {getAddress} from "viem";
 
 import {apiClient} from "@/api/client";
+import {TARGET_CHAIN_ID, TARGET_CHAIN_NAME} from "@/chains";
+import {erc20Abi} from "@/contracts/erc20.abi";
 import {marketAbi} from "@/contracts/market.abi";
 import {courseMarketDeployments} from "@/contracts/deployments";
 
 import {uuidToBytes16} from "./derive";
 import {buttonLabel, isUserRejected, normalizeError} from "./checkoutUtils";
 import type {CheckoutContextProps, CheckoutState, OrderTransactionAck, PurchaseIntent} from "./checkoutTypes";
-
-const TARGET_CHAIN_ID = sepolia.id;
 
 export function CheckoutButton({
     courseId,
@@ -38,11 +38,13 @@ export function CheckoutButton({
     walletId,
     generateIdempotencyKey,
     onSuccess,
-}: CheckoutContextProps) {
+    disabled: externallyDisabled = false,
+}: CheckoutContextProps & {disabled?: boolean}) {
     const {isConnected, address} = useAccount();
     const chainId = useChainId();
     const {switchChain, isPending: isSwitching} = useSwitchChain();
     const {writeContractAsync} = useWriteContract();
+    const publicClient = usePublicClient({chainId: TARGET_CHAIN_ID});
 
     const [state, setState] = useState<CheckoutState>("idle");
     const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function CheckoutButton({
     const onSuccessRef = useRef(onSuccess);
     onSuccessRef.current = onSuccess;
 
-    const marketAddress = courseMarketDeployments.sepolia.address;
+    const marketAddress = courseMarketDeployments.target.address;
     const onWrongChain = isConnected && chainId !== TARGET_CHAIN_ID;
 
     const receipt = useWaitForTransactionReceipt({
@@ -105,11 +107,15 @@ export function CheckoutButton({
             return;
         }
         if (onWrongChain) {
-            setError("Switch to Sepolia to continue.");
+            setError(`Switch to ${TARGET_CHAIN_NAME} to continue.`);
             return;
         }
         if (!marketAddress) {
-            setError("Market contract not deployed on Sepolia yet.");
+            setError(`Market contract not configured on ${TARGET_CHAIN_NAME} yet.`);
+            return;
+        }
+        if (!publicClient) {
+            setError(`RPC client unavailable for ${TARGET_CHAIN_NAME}.`);
             return;
         }
 
@@ -123,10 +129,55 @@ export function CheckoutButton({
             });
             setIntent(fresh);
 
-            setState("signing");
-            // expectedAmount 用 intent.amount（API 在 CreateIntent 时已按 course_prices 锁定）；
-            // intentId 取 purchase_intents.id 的高 128 位 big-endian，对齐合约 bytes16。
+            if (fresh.chainId !== TARGET_CHAIN_ID) {
+                throw new Error(`Intent chain ${fresh.chainId} does not match ${TARGET_CHAIN_ID}`);
+            }
+            if (fresh.courseKey.toLowerCase() !== courseKey.toLowerCase()) {
+                throw new Error("Intent courseKey does not match the selected course");
+            }
+            if (getAddress(fresh.marketAddress) !== getAddress(marketAddress)) {
+                throw new Error("Intent market address does not match the configured market");
+            }
+
             const expectedAmount = BigInt(fresh.amount);
+            const tokenAddress = getAddress(fresh.tokenAddress);
+
+            setState("checking");
+            const [balance, allowance] = await Promise.all([
+                publicClient.readContract({
+                    address: tokenAddress,
+                    abi: erc20Abi,
+                    functionName: "balanceOf",
+                    args: [address],
+                }),
+                publicClient.readContract({
+                    address: tokenAddress,
+                    abi: erc20Abi,
+                    functionName: "allowance",
+                    args: [address, marketAddress],
+                }),
+            ]);
+            if (balance < expectedAmount) {
+                throw new Error("Insufficient YD balance for this purchase");
+            }
+            if (allowance < expectedAmount) {
+                setState("approving");
+                const approvalHash = await writeContractAsync({
+                    address: tokenAddress,
+                    abi: erc20Abi,
+                    functionName: "approve",
+                    args: [marketAddress, expectedAmount],
+                    chainId: TARGET_CHAIN_ID,
+                });
+                const approvalReceipt = await publicClient.waitForTransactionReceipt({
+                    hash: approvalHash,
+                });
+                if (approvalReceipt.status !== "success") {
+                    throw new Error("YD approval transaction reverted");
+                }
+            }
+
+            setState("signing");
             const intentIdBytes16 = uuidToBytes16(fresh.id);
             const hash = await writeContractAsync({
                 address: marketAddress,
@@ -161,8 +212,11 @@ export function CheckoutButton({
 
     const disabled =
         !isConnected ||
+        externallyDisabled ||
         isSwitching ||
         state === "preparing" ||
+        state === "checking" ||
+        state === "approving" ||
         state === "signing" ||
         state === "confirming" ||
         state === "done";
@@ -175,9 +229,9 @@ export function CheckoutButton({
                 onClick={onSwitch}
                 hidden={!onWrongChain}
                 disabled={isSwitching}
-                aria-label="Switch network to Sepolia"
+                aria-label={`Switch network to ${TARGET_CHAIN_NAME}`}
             >
-                {isSwitching ? "Switching…" : "Switch to Sepolia"}
+                {isSwitching ? "Switching…" : `Switch to ${TARGET_CHAIN_NAME}`}
             </button>
 
             <button

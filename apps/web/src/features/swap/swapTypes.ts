@@ -20,7 +20,7 @@ import type {Address} from "viem";
  * - done       — receipt 落账，已算出 actualReceived。
  * - failed     — 终态失败，用户可重试（重试回到 idle）。
  */
-export type SwapState = "idle" | "quoting" | "signing" | "confirming" | "done" | "failed";
+export type SwapState = "idle" | "quoting" | "checking" | "approving" | "signing" | "confirming" | "done" | "failed";
 
 /** MVP 只支持 YD ↔ USDC 这一对，token 选择器据此渲染。 */
 export type TokenSymbol = "YD" | "USDC";
@@ -32,7 +32,7 @@ export interface TokenMeta {
   name: string;
   /** ERC-20 decimals：YD = 18，USDC = 6。parseUnits/formatUnits 依赖它。 */
   decimals: number;
-  /** Sepolia 上的合约地址；未配置时 undefined，UI 需降级为「未部署」。 */
+  /** 目标测试链上的合约地址；未配置时 undefined，UI 需降级为「未部署」。 */
   address: Address | undefined;
 }
 

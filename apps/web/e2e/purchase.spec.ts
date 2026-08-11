@@ -4,7 +4,7 @@
  * 覆盖 F03 验收：
  *   - AC-001: 匿名访问 /catalog → 看见 Sign in CTA，无 user-menu。
  *   - AC-002: 学生登录后打开课程详情 → 点 Buy → CheckoutPanel 出现。
- *   - AC-003: CheckoutButton 状态机 idle → preparing → signing → confirming → done。
+ *   - AC-003: CheckoutButton 状态机 idle → preparing → checking → signing → confirming → done。
  *   - AC-004: 成功时 /me/enrollments 包含新报名。
  *   - AC-005: 失败（409 ALREADY_PURCHASED）展示 user-visible 错误，不进入 done。
  *
@@ -30,7 +30,8 @@ const STUDENT_WALLET = ("0x" + "11".repeat(20)) as `0x${string}`;
 const MARKET_ADDRESS = ("0x" + "22".repeat(20)) as `0x${string}`;
 const TOKEN_ADDRESS = ("0x" + "33".repeat(20)) as `0x${string}`;
 const PRICE_ID = "p_00000000-0000-0000-0000-000000000001";
-const COURSE_KEY = ("0x" + "44".repeat(32)) as `0x${string}`;
+// sha256(UUID bytes), matching API/web course-key derivation.
+const COURSE_KEY = "0x86a427757a31f2dacd9e79abf88cb4440d4cd0d708e10763f296b25754db80a5" as const;
 
 const COURSE = {
     id: COURSE_ID,
@@ -82,6 +83,7 @@ async function installWalletAndRpc(page: Page) {
         const handle = ({method, id = 1}: Rpc) => {
             let result: unknown = null;
             if (method === "eth_getTransactionReceipt") result = {transactionHash: TX_HASH, blockHash: "0x" + "aa".repeat(32), blockNumber: "0x1234", from: STUDENT_WALLET, to: MARKET_ADDRESS, status: "0x1", gasUsed: "0x5208", cumulativeGasUsed: "0x5208", logs: [], contractAddress: null, logsBloom: "0x" + "00".repeat(256), transactionIndex: "0x0"};
+            if (method === "eth_call") result = "0x" + "ff".repeat(32); // balanceOf / allowance
             if (method === "eth_blockNumber") result = "0x1234";
             if (method === "eth_getTransactionCount") result = "0x1";
             if (method === "eth_gasPrice") result = "0x3b9aca00";
@@ -178,7 +180,7 @@ test.describe("F03 / 购买 / purchase flow", () => {
         await cta.click();
 
         // 状态机进入链上处理中间态；成功后产品会立即跳到独立的报名路由。
-        await expect(cta).toHaveAttribute("data-state", /preparing|signing|confirming/);
+        await expect(cta).toHaveAttribute("data-state", /preparing|checking|approving|signing|confirming/);
         await expect(page).toHaveURL(/\/account\/enrollments$/, {timeout: 10_000});
         await expect(page.getByRole("heading", {name: "My enrollments"})).toBeVisible();
         await expect(page.locator(".my-enrollments__title", {hasText: COURSE.title})).toBeVisible();

@@ -1,5 +1,5 @@
 // Filled in by hand after each deploy:
-//   pnpm contracts:deploy:sepolia                -> counterDeployments
+//   pnpm contracts:deploy:sepolia                 -> counterDeployments
 //   pnpm contracts:deploy:notepad:sepolia         -> notepadDeployments
 //   pnpm contracts:deploy:course-market:sepolia   -> courseMarketDeployments
 //   pnpm contracts:deploy:yd-token:sepolia        -> ydTokenDeployments
@@ -8,6 +8,8 @@
 // entry below. Address validation happens via optionalAddress() so missing
 // addresses silently become undefined (UI should fall back to "not deployed").
 import type {Address} from "viem";
+
+import {TARGET_CHAIN_ID} from "@/chains";
 
 function optionalAddress(value: string | undefined): Address | undefined {
     return value?.match(/^0x[0-9a-fA-F]{40}$/) ? (value as Address) : undefined;
@@ -29,13 +31,13 @@ export const notepadDeployments = {
 
 /**
  * CourseMarket — 课程链上购买入口（F03）。
- * 部署后用 PAYMENT_TOKEN_ADDRESS / COURSES_CONFIG_PATH 配置课程。
- * v1 部署槽位占位；Sepolia 上线后回填。
+ * 先部署市场，再用 COURSES_CONFIG_PATH 执行配置模式写入课程和支付 Token。
+ * 地址由 VITE_TARGET_CHAIN_ID 所选的 Anvil 或 Sepolia 环境回填。
  */
 export const courseMarketDeployments = {
-    sepolia: {
+    target: {
         address: optionalAddress(import.meta.env.VITE_COURSE_MARKET_ADDRESS),
-        chainId: 11155111,
+        chainId: TARGET_CHAIN_ID,
     },
 } as const;
 
@@ -44,9 +46,9 @@ export const courseMarketDeployments = {
  * ADR-0002：cap=1B，initial supply=200M 部署到 treasury 多签。
  */
 export const ydTokenDeployments = {
-    sepolia: {
+    target: {
         address: optionalAddress(import.meta.env.VITE_YD_TOKEN_ADDRESS),
-        chainId: 11155111,
+        chainId: TARGET_CHAIN_ID,
     },
 } as const;
 
@@ -55,8 +57,16 @@ export const ydTokenDeployments = {
  * soulbound：默认仅 MINTER_ROLE（Worker signer）可铸造。
  */
 export const certificateNftDeployments = {
-    sepolia: {
+    target: {
         address: optionalAddress(import.meta.env.VITE_CERTIFICATE_NFT_ADDRESS),
-        chainId: 11155111,
+        chainId: TARGET_CHAIN_ID,
+    },
+} as const;
+
+/** Guarded Chainlink-compatible reference price adapter. */
+export const priceOracleDeployments = {
+    target: {
+        address: optionalAddress(import.meta.env.VITE_PRICE_ORACLE_ADDRESS),
+        chainId: TARGET_CHAIN_ID,
     },
 } as const;

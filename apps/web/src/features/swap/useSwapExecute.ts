@@ -11,10 +11,11 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from "react";
-import {useWaitForTransactionReceipt, useWriteContract} from "wagmi";
+import {useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract} from "wagmi";
 import type {Address} from "viem";
 
 import {swapRouterAbi} from "@/contracts/swap.abi";
+import {erc20Abi} from "@/contracts/erc20.abi";
 
 import {DEFAULT_FEE_TIER, NO_PRICE_LIMIT, TARGET_CHAIN_ID, swapRouterAddress} from "./swapConfig";
 import {extractReceivedAmount, isUserRejected, normalizeError} from "./swapErrors";
@@ -44,6 +45,8 @@ export function useSwapExecute(
   onSuccess?: (settlement: SwapSettlement) => void,
 ): UseSwapExecuteResult {
   const {writeContractAsync} = useWriteContract();
+  const {address} = useAccount();
+  const publicClient = usePublicClient({chainId: TARGET_CHAIN_ID});
 
   const [state, setState] = useState<Exclude<SwapState, "quoting">>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -85,12 +88,49 @@ export function useSwapExecute(
     async (args: ExecuteArgs) => {
       setError(null);
       if (!swapRouterAddress) {
-        setError("Swap router is not configured on Sepolia yet.");
+        setError("Swap router is not configured on the target chain yet.");
         return;
       }
-      setState("signing");
+      if (!address || !publicClient) {
+        setError("Wallet or RPC client is unavailable.");
+        return;
+      }
       setPending({tokenOut: args.tokenOut, recipient: args.recipient, min: args.minAmountOut});
       try {
+        setState("checking");
+        const [balance, allowance] = await Promise.all([
+          publicClient.readContract({
+            address: args.tokenIn,
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [address],
+          }),
+          publicClient.readContract({
+            address: args.tokenIn,
+            abi: erc20Abi,
+            functionName: "allowance",
+            args: [address, swapRouterAddress],
+          }),
+        ]);
+        if (balance < args.amountIn) {
+          throw new Error("Insufficient token balance for this swap");
+        }
+        if (allowance < args.amountIn) {
+          setState("approving");
+          const approvalHash = await writeContractAsync({
+            address: args.tokenIn,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [swapRouterAddress, args.amountIn],
+            chainId: TARGET_CHAIN_ID,
+          });
+          const approvalReceipt = await publicClient.waitForTransactionReceipt({hash: approvalHash});
+          if (approvalReceipt.status !== "success") {
+            throw new Error("Token approval transaction reverted");
+          }
+        }
+
+        setState("signing");
         const hash = await writeContractAsync({
           address: swapRouterAddress,
           abi: swapRouterAbi,
@@ -122,7 +162,7 @@ export function useSwapExecute(
         setError(normalizeError(cause).message);
       }
     },
-    [writeContractAsync],
+    [address, publicClient, writeContractAsync],
   );
 
   const reset = useCallback(() => {

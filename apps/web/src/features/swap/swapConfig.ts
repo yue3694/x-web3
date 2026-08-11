@@ -2,8 +2,7 @@
  * Swap 切片常量与地址解析（F05）。
  *
  * ⚠️ 地址来源说明：
- * 任务书要求从 `@/contracts/deployments.ts` 读取 `ydTokenDeployments.sepolia`、
- * `swapRouterDeployments.sepolia`、`quoterDeployments.sepolia`。
+ * YD 从 target deployment 读取；外部 Router / Quoter / USDC 暂由 env 注入。
  * 目前 deployments.ts 里**只有** ydTokenDeployments —— router / quoter / USDC
  * 三个槽位尚未登记，而本次改动不允许修改 deployments.ts。
  * 因此这里用与 deployments.ts 完全一致的 optionalAddress 校验方式，从 env 读取
@@ -13,9 +12,9 @@
  * usdcDeployments 后，删掉本文件的 envAddress 分支，直接 import。 — 2026-08-10
  */
 
-import {sepolia} from "wagmi/chains";
 import type {Address} from "viem";
 
+import {TARGET_CHAIN_ID} from "@/chains";
 import {ydTokenDeployments} from "@/contracts/deployments";
 
 import type {TokenMeta, TokenSymbol} from "./swapTypes";
@@ -27,7 +26,7 @@ function envAddress(value: unknown): Address | undefined {
     : undefined;
 }
 
-export const TARGET_CHAIN_ID = sepolia.id;
+export {TARGET_CHAIN_ID};
 
 /**
  * Uniswap V3 手续费档位（百万分之一）。MVP 固定 0.3% 池。
@@ -69,14 +68,14 @@ export function probeAmount(decimals: number): bigint {
 
 /**
  * MVP 代币表：只有 YD ↔ USDC。
- * YD 地址来自 deployments.ts；USDC 是 Sepolia 上的测试网 USDC，走 env 注入。
+ * YD 地址来自 deployments.ts；USDC 测试地址走 env 注入。
  */
 export const TOKENS: Readonly<Record<TokenSymbol, TokenMeta>> = {
   YD: {
     symbol: "YD",
     name: "YiDeng Token",
     decimals: 18,
-    address: ydTokenDeployments.sepolia.address,
+    address: ydTokenDeployments.target.address,
   },
   USDC: {
     symbol: "USDC",
@@ -89,8 +88,8 @@ export const TOKENS: Readonly<Record<TokenSymbol, TokenMeta>> = {
 /** 可选代币列表，喂给下拉框。 */
 export const TOKEN_SYMBOLS: readonly TokenSymbol[] = ["YD", "USDC"];
 
-/** Uniswap V3 SwapRouter（Sepolia）。未配置 → UI 降级为「未部署」。 */
+/** Uniswap V3 SwapRouter（目标测试链）。未配置 → UI 降级为「未部署」。 */
 export const swapRouterAddress = envAddress(import.meta.env.VITE_SWAP_ROUTER_ADDRESS);
 
-/** Uniswap V3 QuoterV2（Sepolia）。未配置 → 无法报价。 */
+/** Uniswap V3 QuoterV2（目标测试链）。未配置 → 无法报价。 */
 export const quoterAddress = envAddress(import.meta.env.VITE_QUOTER_ADDRESS);
