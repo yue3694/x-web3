@@ -11,6 +11,7 @@
 **/.turbo/
 **/.vite/
 **/.cache/
+.deploy/
 
 # ---------- Debug / TS build info ----------
 *.dbg.json

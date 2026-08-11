@@ -17,11 +17,16 @@ Parameters:
       - PriceClass_100
       - PriceClass_200
       - PriceClass_All
+  ApiOriginDomain:
+    Type: String
+    Default: ""
+    Description: Optional backend hostname for /api/* requests.
 
 Conditions:
   UseCustomDomain: !And
     - !Not [!Equals [!Ref DomainName, ""]]
     - !Not [!Equals [!Ref AcmCertificateArn, ""]]
+  UseApiOrigin: !Not [!Equals [!Ref ApiOriginDomain, ""]]
 
 Resources:
   SiteBucket:
@@ -104,6 +109,17 @@ Resources:
           ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
           TargetOriginId: site-bucket
           ViewerProtocolPolicy: redirect-to-https
+        CacheBehaviors: !If
+          - UseApiOrigin
+          - - PathPattern: /api/*
+              AllowedMethods: [DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT]
+              CachedMethods: [GET, HEAD, OPTIONS]
+              CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+              OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+              Compress: true
+              TargetOriginId: api-backend
+              ViewerProtocolPolicy: redirect-to-https
+          - !Ref AWS::NoValue
         DefaultRootObject: index.html
         Enabled: true
         HttpVersion: http2and3
@@ -114,6 +130,15 @@ Resources:
             OriginAccessControlId: !Ref OriginAccessControl
             S3OriginConfig:
               OriginAccessIdentity: ""
+          - !If
+            - UseApiOrigin
+            - DomainName: !Ref ApiOriginDomain
+              Id: api-backend
+              CustomOriginConfig:
+                HTTPPort: 80
+                OriginProtocolPolicy: http-only
+                OriginReadTimeout: 30
+            - !Ref AWS::NoValue
         PriceClass: !Ref PriceClass
         ViewerCertificate: !If
           - UseCustomDomain
