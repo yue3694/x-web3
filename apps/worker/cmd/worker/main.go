@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/x-web3/worker/internal/config"
 	"github.com/x-web3/worker/internal/indexer"
 	"github.com/x-web3/worker/internal/metrics"
 	workerorder "github.com/x-web3/worker/internal/order"
@@ -33,14 +34,29 @@ import (
 )
 
 func main() {
+	// 自动从 CWD 或祖先目录加载 .env；找不到也不报错（prod 走真 env）。
+	dotenv := config.LoadDotenv()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger.Info("dotenv_loaded",
+		"loaded", dotenv.Loaded,
+		"path", dotenv.Path,
+		"cwd", dotenv.CWD,
+	)
 
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		logger.Error("DATABASE_URL not set; exiting")
+		if !dotenv.Loaded {
+			logger.Error("DATABASE_URL not set; exiting",
+				"candidates", dotenv.Candidates,
+				"hint", "复制仓库根 .env.example 为 .env 并填 DATABASE_URL，或在启动前 export DATABASE_URL",
+			)
+		} else {
+			logger.Error("DATABASE_URL not set after loading .env; exiting", "dotenvPath", dotenv.Path)
+		}
 		os.Exit(1)
 	}
 	pool, err := pgxpool.New(ctx, dsn)
