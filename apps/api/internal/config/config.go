@@ -46,6 +46,7 @@ type Config struct {
 
 	// Chain
 	SepoliaRPCURL string // Sepolia JSON-RPC endpoint（admin/chain/sync 用）
+	ChainID       int64  // 业务链；本地 Anvil=31337，Sepolia=11155111
 
 	// Logging
 	LogLevel string
@@ -61,24 +62,25 @@ func MustLoad() *Config {
 
 func Load() (*Config, error) {
 	c := &Config{
-		Env:             getEnv("API_ENV", "dev"),
-		APIPort:         getEnvInt("API_PORT", 8080),
-		BaseURL:         getEnv("API_BASE_URL", "http://localhost:8080"),
-		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		RedisURL:        os.Getenv("REDIS_URL"),
-		WebOrigin:       getEnv("WEB_ORIGIN", "http://localhost:5173"),
-		PrivyAppID:      os.Getenv("PRIVY_APP_ID"),
-		PrivyJWKSURL:    os.Getenv("PRIVY_JWKS_URL"),
-		PrivyAudience:   os.Getenv("PRIVY_AUDIENCE"),
-		PrivyDevStub:    os.Getenv("PRIVY_DEV_STUB") == "1",
-		PrivyDevSubject: os.Getenv("PRIVY_DEV_STUB_SUBJECT"),
-		SessionSecret:   []byte(os.Getenv("SESSION_SECRET")),
-		SessionTTL:      time.Duration(getEnvInt("SESSION_TTL_HOURS", 168)) * time.Hour,
-		CookieSecure:    getEnvBool("SESSION_COOKIE_SECURE", false),
-		APIDomain:       getEnv("API_DOMAIN", "localhost:8080"),
+		Env:               getEnv("API_ENV", "dev"),
+		APIPort:           getEnvInt("API_PORT", 8080),
+		BaseURL:           getEnv("API_BASE_URL", "http://localhost:8080"),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		RedisURL:          os.Getenv("REDIS_URL"),
+		WebOrigin:         getEnv("WEB_ORIGIN", "http://localhost:5173"),
+		PrivyAppID:        os.Getenv("PRIVY_APP_ID"),
+		PrivyJWKSURL:      os.Getenv("PRIVY_JWKS_URL"),
+		PrivyAudience:     os.Getenv("PRIVY_AUDIENCE"),
+		PrivyDevStub:      os.Getenv("PRIVY_DEV_STUB") == "1",
+		PrivyDevSubject:   os.Getenv("PRIVY_DEV_STUB_SUBJECT"),
+		SessionSecret:     []byte(os.Getenv("SESSION_SECRET")),
+		SessionTTL:        time.Duration(getEnvInt("SESSION_TTL_HOURS", 168)) * time.Hour,
+		CookieSecure:      getEnvBool("SESSION_COOKIE_SECURE", false),
+		APIDomain:         getEnv("API_DOMAIN", "localhost:8080"),
 		WalletNonceTTL:    time.Duration(getEnvInt("WALLET_NONCE_TTL_SECONDS", 300)) * time.Second,
 		PurchaseIntentTTL: time.Duration(getEnvInt("PURCHASE_INTENT_TTL_MINUTES", 15)) * time.Minute,
 		SepoliaRPCURL:     os.Getenv("SEPOLIA_RPC_URL"),
+		ChainID:           getEnvInt64("CHAIN_ID", 11_155_111),
 		LoginRateLimit:    getEnvInt("LOGIN_RATE_LIMIT_PER_MINUTE", 10),
 		WalletRateLimit:   getEnvInt("WALLET_RATE_LIMIT_PER_MINUTE", 5),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
@@ -128,6 +130,15 @@ func getEnv(k, def string) string {
 func getEnvInt(k string, def int) int {
 	if v := os.Getenv(k); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+func getEnvInt64(k string, def int64) int64 {
+	if v := os.Getenv(k); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return n
 		}
 	}

@@ -54,10 +54,10 @@ var (
 
 // 默认参数。
 const (
-	defaultBatchSize     = 10
-	defaultMaxAttempts   = 5
-	defaultPollInterval  = 2 * time.Second
-	defaultConfirmDepth  = 12
+	defaultBatchSize    = 10
+	defaultMaxAttempts  = 5
+	defaultPollInterval = 2 * time.Second
+	defaultConfirmDepth = 12
 	// baseBackoff 第一次重试延迟；后续 2^(attempt-1) 倍。
 	baseBackoff = 30 * time.Second
 	// maxBackoff 防止 attempt 大时秒级变天。
@@ -133,10 +133,10 @@ type ConsumerConfig struct {
 
 // ConsumerMetrics 计数器；worker metrics 包可拉取。
 type ConsumerMetrics struct {
-	Processed atomic.Uint64
-	Succeeded atomic.Uint64
-	Retried   atomic.Uint64
-	DeadLet   atomic.Uint64
+	Processed        atomic.Uint64
+	Succeeded        atomic.Uint64
+	Retried          atomic.Uint64
+	DeadLet          atomic.Uint64
 	BroadcastRetries atomic.Uint64
 }
 
@@ -145,7 +145,7 @@ type Consumer struct {
 	cfg    ConsumerConfig
 	logger *slog.Logger
 	// seed RNG once at construction so backoff jitter is deterministic per consumer.
-	rng *rand.Rand
+	rng   *rand.Rand
 	rngMu sync.Mutex
 }
 
@@ -251,9 +251,9 @@ func (c *Consumer) runOnce(ctx context.Context) {
 
 	// claimBatch：拿到一批 job id（仅 id，方便后续逐条读）。
 	type claimed struct {
-		id        uuid.UUID
-		attempt   int
-		certID    uuid.UUID
+		id      uuid.UUID
+		attempt int
+		certID  uuid.UUID
 	}
 	rows, err := c.cfg.Pool.Query(ctx, `
 UPDATE certificate_jobs
@@ -302,11 +302,11 @@ RETURNING id, attempt, certificate_id`,
 // handleJob 单 job 全流程；非 nil error 走 retry/dead-letter 路径。
 //
 // 流程：
-//  1) 读 certificates 行（含 certificate_id, recipient_wallet, metadata_uri）；
-//  2) signer.SignCertificateMint(certID, recipient, uri) 构造签名交易；
-//  3) Client.SendTransaction 广播（重试 3 次，指数退避）；
-//  4) Client.WaitMined 等 receipt；
-//  5) UPDATE certificates + certificate_jobs：成功 → confirmed；失败 → pending / dead。
+//  1. 读 certificates 行（含 certificate_id, recipient_wallet, metadata_uri）；
+//  2. signer.SignCertificateMint(certID, recipient, uri) 构造签名交易；
+//  3. Client.SendTransaction 广播（重试 3 次，指数退避）；
+//  4. Client.WaitMined 等 receipt；
+//  5. UPDATE certificates + certificate_jobs：成功 → confirmed；失败 → pending / dead。
 func (c *Consumer) handleJob(ctx context.Context, jobID, certUUID uuid.UUID, prevAttempt int) {
 	cert, err := c.loadCertificate(ctx, certUUID)
 	if err != nil {
@@ -413,10 +413,10 @@ func (c *Consumer) loadCertificate(ctx context.Context, certID uuid.UUID) (*Cert
 	var tokenIDStr *string
 	err := c.cfg.Pool.QueryRow(ctx, `
 SELECT id, user_id, course_id, cert_version,
-       to_char(certificate_id, 'FM9999999999999999999999999999999999999999999999999999999999999999999999999'),
+       certificate_id::text,
        recipient_wallet, metadata_uri, metadata_sha256,
        chain_id, tx_hash,
-       to_char(token_id, 'FM9999999999999999999999999999999999999999999999999999999999999999999999999'),
+       token_id::text,
        status, attempts
 FROM certificates WHERE id=$1`, certID).Scan(
 		&row.ID, &row.UserID, &row.CourseID, &row.CertVersion,
@@ -551,10 +551,10 @@ WHERE id=$1`,
 		// 写 DLQ（best-effort；失败仅记日志，不抛）。
 		chainID := c.cfg.ChainID
 		payload := map[string]any{
-			"jobId":           jobID.String(),
-			"certificateId":   zeroUUIDString(cert),
-			"attempt":         newAttempt,
-			"reason":          reason,
+			"jobId":         jobID.String(),
+			"certificateId": zeroUUIDString(cert),
+			"attempt":       newAttempt,
+			"reason":        reason,
 		}
 		if receipt != nil {
 			payload["txHash"] = receipt.TxHash.Hex()

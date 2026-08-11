@@ -21,12 +21,12 @@ import (
 
 // fakeClient 是 indexer.Client 的测试替身：可注入 head / logs 序列 + 错误。
 type fakeClient struct {
-	mu sync.Mutex
-	chainID *big.Int
-	headers map[int64]*Header
-	logs    map[uint64][]types.Log
-	headerErr error
-	filterErr error
+	mu         sync.Mutex
+	chainID    *big.Int
+	headers    map[int64]*Header
+	logs       map[uint64][]types.Log
+	headerErr  error
+	filterErr  error
 	closeCount atomic.Int32
 }
 
@@ -241,19 +241,19 @@ func TestRunner_PollingCycleAdvancesCheckpoint(t *testing.T) {
 	pool := indexerRPCPool(t, cl)
 
 	cfg := Config{
-		ChainID:         11155111,
-		Consumer:        "test",
-		ConfirmDepth:    5,
-		PollInterval:    50 * time.Millisecond,
-		HealthWindow:    100 * time.Millisecond,
-		BatchSize:       1000,
+		ChainID:          11155111,
+		Consumer:         "test",
+		ConfirmDepth:     5,
+		PollInterval:     50 * time.Millisecond,
+		HealthWindow:     100 * time.Millisecond,
+		BatchSize:        1000,
 		SubscribeTimeout: time.Second,
-		Logger:          newDiscardLogger(),
-		Decoder:         noopDecoder{},
-		Confirmer:       confirmer,
-		CheckpointStore: store,
-		RPCPool:         pool,
-		Metrics:         &Metrics{},
+		Logger:           newDiscardLogger(),
+		Decoder:          noopDecoder{},
+		Confirmer:        confirmer,
+		CheckpointStore:  store,
+		RPCPool:          pool,
+		Metrics:          &Metrics{},
 	}
 	r, err := NewRunner(cfg)
 	if err != nil {
@@ -359,7 +359,7 @@ func TestRunner_DecodeTriggersApply(t *testing.T) {
 	if err := r.runCycle(context.Background()); err != nil {
 		t.Fatalf("runCycle: %v", err)
 	}
-	// 应用是异步的；等一下让 goroutine 跑完。
+	// 应用必须在 runCycle 返回前完成，checkpoint 才能安全推进。
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if confirmer.callCount() > 0 {
@@ -375,8 +375,8 @@ func TestRunner_DecodeTriggersApply(t *testing.T) {
 	}
 }
 
-// TestRunner_GracefulShutdownDrainsInFlight 验证：ctx cancel 时 in-flight 应用被等完。
-func TestRunner_GracefulShutdownDrainsInFlight(t *testing.T) {
+// TestRunner_CheckpointWaitsForApply 验证：Apply 未完成时不能推进 checkpoint。
+func TestRunner_CheckpointWaitsForApply(t *testing.T) {
 	cl := newFakeClient(1)
 	cl.setHeader(15, mkHeader(15, 0xDD))
 	cl.setLogs(10, []types.Log{{BlockNumber: 10, TxHash: common.HexToHash("0x1"), Index: 0}})
@@ -404,30 +404,33 @@ func TestRunner_GracefulShutdownDrainsInFlight(t *testing.T) {
 		t.Fatalf("NewRunner: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	// 第一次 runCycle 触发 Apply（异步）。
-	if err := r.runCycle(ctx); err != nil {
-		t.Fatalf("runCycle: %v", err)
-	}
-	// 等 in-flight 进入 Apply
+	ctx := context.Background()
+	cycleDone := make(chan error, 1)
+	go func() { cycleDone <- r.runCycle(ctx) }()
+	// 等 Apply 开始，但先不释放。
 	select {
 	case <-started:
 	case <-time.After(time.Second):
-		t.Fatal("in-flight apply did not start")
+		t.Fatal("apply did not start")
 	}
-	// 取消 ctx → 等待退出（Wait 应该等 in-flight 完成）
-	cancel()
-	done := make(chan struct{})
-	go func() {
-		r.wg.Wait()
-		close(done)
-	}()
-	close(release) // 释放 slowConfirmer
+	if _, err := store.Load(ctx, 1, "t"); !errors.Is(err, ErrCheckpointNotFound) {
+		t.Fatalf("checkpoint advanced before Apply completed: %v", err)
+	}
+	close(release)
 	select {
-	case <-done:
+	case err := <-cycleDone:
+		if err != nil {
+			t.Fatalf("runCycle: %v", err)
+		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("in-flight did not drain within 2s")
+		t.Fatal("runCycle did not finish after Apply completed")
+	}
+	cp, err := store.Load(ctx, 1, "t")
+	if err != nil {
+		t.Fatalf("Load checkpoint: %v", err)
+	}
+	if cp.NextBlock != 15 {
+		t.Fatalf("NextBlock = %d, want 15", cp.NextBlock)
 	}
 }
 
@@ -458,6 +461,12 @@ func TestRedactURL_StripsPathAndQuery(t *testing.T) {
 		if got := RedactURL(c.in); got != c.want {
 			t.Errorf("RedactURL(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestRetryBackoffCapsLargeAttempt(t *testing.T) {
+	if got := retryBackoff(1_000_000); got != 10*time.Second {
+		t.Fatalf("retryBackoff(large) = %s, want 10s", got)
 	}
 }
 

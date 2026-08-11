@@ -47,3 +47,16 @@ func TestLoadAcceptsSecureProductionConfiguration(t *testing.T) {
 		t.Fatal("expected CookieSecure")
 	}
 }
+
+func TestLoadUsesConfiguredTestChain(t *testing.T) {
+	setValidBaseEnv(t)
+	t.Setenv("CHAIN_ID", "31337")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.ChainID != 31337 {
+		t.Fatalf("ChainID = %d, want 31337", cfg.ChainID)
+	}
+}

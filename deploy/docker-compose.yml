@@ -49,8 +49,10 @@ services:
     image: ghcr.io/foundry-rs/foundry:stable
     container_name: x-web3-anvil
     restart: unless-stopped
+    # The image entrypoint is `sh -c`; with list-form command only the first
+    # item becomes the shell command and all Anvil flags are silently ignored.
+    entrypoint: ["anvil"]
     command:
-      - "anvil"
       - "--host"
       - "0.0.0.0"
       - "--port"

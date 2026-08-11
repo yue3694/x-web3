@@ -255,21 +255,25 @@ func runIndexer(
 		return nil
 	}
 	poolClient := indexer.NewRPCPool(clients, logger, idxMetrics)
+	marketAddresses := parseAddressCSV(os.Getenv("WORKER_MARKET_ADDRESSES"))
+	logger.Info("indexer_filter_configured", "marketAddresses", marketAddresses)
 
 	confirmer := workerorder.NewConfirmer(pool)
 	runner, err := indexer.NewRunner(indexer.Config{
-		ChainID:          chainID,
-		Consumer:         consumer,
-		ConfirmDepth:     confirmDepth,
-		PollInterval:     time.Duration(envInt64("WORKER_POLL_INTERVAL_SECONDS", 5)) * time.Second,
-		HealthWindow:     time.Duration(envInt64("WORKER_RPC_HEALTH_WINDOW_SECONDS", 30)) * time.Second,
-		BatchSize:        envInt64("WORKER_BATCH_SIZE", 1000),
-		SubscribeTimeout: time.Duration(envInt64("WORKER_WS_SUBSCRIBE_TIMEOUT_SECONDS", 10)) * time.Second,
-		Logger:           logger,
-		Decoder:          indexerLogDecoder{},
-		Confirmer:        confirmerAdapter{c: confirmer},
-		CheckpointStore:  indexer.NewPGCheckpointStore(pool),
-		RPCPool:          poolClient,
+		ChainID:              chainID,
+		Consumer:             consumer,
+		ConfirmDepth:         confirmDepth,
+		PollInterval:         time.Duration(envInt64("WORKER_POLL_INTERVAL_SECONDS", 5)) * time.Second,
+		HealthWindow:         time.Duration(envInt64("WORKER_RPC_HEALTH_WINDOW_SECONDS", 30)) * time.Second,
+		BatchSize:            envInt64("WORKER_BATCH_SIZE", 1000),
+		SubscribeTimeout:     time.Duration(envInt64("WORKER_WS_SUBSCRIBE_TIMEOUT_SECONDS", 10)) * time.Second,
+		Logger:               logger,
+		Decoder:              indexerLogDecoder{},
+		Confirmer:            confirmerAdapter{c: confirmer},
+		CheckpointStore:      indexer.NewPGCheckpointStore(pool),
+		RPCPool:              poolClient,
+		Addresses:            marketAddresses,
+		DisableSubscriptions: strings.TrimSpace(os.Getenv("WORKER_WS_URL")) == "",
 		OnReorg: func(ctx context.Context, info indexer.ReorgInfo) error {
 			_, _, err := indexer.HandleReorg(ctx, pool, info, map[string]any{"source": "runner"})
 			return err
@@ -310,17 +314,17 @@ type indexerLogDecoder struct{}
 func (indexerLogDecoder) Decode(_ context.Context, chainID int64, _ *indexer.Header, rec indexer.LogRecord) ([]workerorder.ApplyInput, bool, error) {
 	// 长度 < 3 是 base case（topic[0]+2 indexed），用 ErrTooFewTopics 表达。
 	if len(rec.Topics) < 3 {
-		return nil, false, nil
+		return nil, true, nil
 	}
 	// topic0 不匹配 → 静默 skip，不计入 Apply
 	if rec.Topics[0] != chain.CoursePurchasedTopic {
-		return nil, false, nil
+		return nil, true, nil
 	}
 	decoded, err := chain.Decode(&rec)
 	if err != nil {
 		if errors.Is(err, chain.ErrLogRemoved) {
 			// reorged log：返回 ok=false 让 indexer 走 reorg 路径
-			return nil, false, nil
+			return nil, true, nil
 		}
 		// ErrTooFewTopics / ErrDecodeData / ErrTopicMismatch 已在上层过滤；
 		// 其它错误按 generic 处理 — 返回 (nil, false, err) 让 runner 计数 + log。
@@ -339,7 +343,7 @@ func (indexerLogDecoder) Decode(_ context.Context, chainID int64, _ *indexer.Hea
 		EventSig:        chain.CoursePurchasedTopic,
 		Event:           decoded,
 	}
-	return []workerorder.ApplyInput{in}, true, nil
+	return []workerorder.ApplyInput{in}, false, nil
 }
 
 // loadPendingFromOutbox MVP 阶段不持久化 pending 队列。
@@ -518,6 +522,17 @@ func splitCSV(v string) []string {
 		p = strings.TrimSpace(p)
 		if p != "" {
 			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func parseAddressCSV(v string) []common.Address {
+	parts := splitCSV(v)
+	out := make([]common.Address, 0, len(parts))
+	for _, part := range parts {
+		if common.IsHexAddress(part) {
+			out = append(out, common.HexToAddress(part))
 		}
 	}
 	return out

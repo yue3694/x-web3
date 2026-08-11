@@ -10,6 +10,7 @@
 //  7. RBAC engine
 //  8. Audit writer
 //  9. Catalog service（带缓存订阅）
+//
 // 10. HTTP router + handlers
 // 11. graceful shutdown
 package main
@@ -114,11 +115,10 @@ func main() {
 	if err != nil {
 		logger.Fatal("cert_metadata_generator", zap.Error(err))
 	}
-	// MVP 默认 Sepolia；F05-T16 把 chain_id 注入 cfg 后再读 cfg.ChainID。
 	certificateSvc, err := certificate.NewService(certificate.ServiceConfig{
 		Pool:     pool,
 		Metadata: metaGen,
-		ChainID:  11155111,
+		ChainID:  cfg.ChainID,
 		Logger:   logger,
 	})
 	if err != nil {

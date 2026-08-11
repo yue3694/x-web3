@@ -12,21 +12,23 @@ docker compose -f deploy/docker-compose.yml up -d redis anvil
 
 # 2) 数据库 migrate
 cd database && ./migrate.sh up && cd ..
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/seed/0001_roles.sql
 
 # 3) 复制根 .env.example → .env，填必要字段
 cp .env.example .env
 #   - ANVIL_RPC_URL=http://localhost:8545
 #   - WORKER_RPC_URLS=http://localhost:8545
+#   - WORKER_MARKET_ADDRESSES=0x...（CourseMarket 地址）
 #   - WORKER_CHAIN_ID=31337 / CHAIN_CONFIRMATION_DEPTH=1
 #   - VITE_TARGET_CHAIN_ID=31337 / VITE_RPC_URL=http://localhost:8545
 #   - SIGNER_DRIVER=anvil
 #   - CERT_NFT_ADDRESS=0x...（见步骤 2）
 ```
 
-## 1. 起 Anvil
+## 1. 验证 Docker Anvil
 
 ```bash
-anvil --chain-id 31337 --block-time 1
+cast chain-id --rpc-url http://127.0.0.1:8545
 # 默认账户 #0：0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 # 私钥（**仅本地开发**）：0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```
@@ -69,7 +71,8 @@ cd -
 - `CERT_NFT_ADDRESS` 与 `VITE_CERTIFICATE_NFT_ADDRESS`
 - `VITE_PRICE_ORACLE_ADDRESS`
 
-Worker 同时设置 `WORKER_CHAIN_ID=31337`、`CHAIN_CONFIRMATION_DEPTH=1`。
+Worker 同时设置 `WORKER_CHAIN_ID=31337`、`CHAIN_CONFIRMATION_DEPTH=1`、
+`WORKER_MARKET_ADDRESSES=0xCourseMarketAddress`。
 前端设置 `VITE_TARGET_CHAIN_ID=31337`、`VITE_RPC_URL=http://127.0.0.1:8545`。
 
 ## 3. 起 worker / api / web
@@ -84,7 +87,7 @@ cd apps/web && pnpm dev                  # 终端 3
 worker 启动日志应包含：
 
 ```text
-cert_consumer_initialized signerDriver=anvil contract=0x... confirmDepth=12
+cert_consumer_initialized signerDriver=anvil contract=0x... confirmDepth=1
 treasury_monitor_disabled_empty hint="设置 ..."
 ```
 
@@ -116,14 +119,14 @@ SELECT id, aggregate, type FROM outbox_events ORDER BY created_at DESC LIMIT 1;
 
 ```bash
 # 课程是否在 CourseMarket 里
-cast call 0xCourseMarketAddress "courses(bytes32)(address,uint256,uint256)" \
+cast call 0xCourseMarketAddress "getConfig(bytes32)(address,uint256,uint256)" \
   0xCourseKeyHex --rpc-url http://localhost:8545
 
 # 证书是否 mint
 cast call 0xCertNFTAddress "balanceOf(address)(uint256)" \
   0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
   --rpc-url http://localhost:8545
-# 期望：连续 5 张证书 → balanceOf = 5
+# 期望：完成一门课程后 balanceOf = 1
 ```
 
 ## 7. Prometheus 指标
@@ -149,6 +152,7 @@ curl -s http://localhost:9090/metrics | grep worker_
 | 连续 2 张证书第 2 张 mint 失败 | ChainTxParams 没装（PR-A4 之前的版本，nonce=0） |
 | 余额告警没出 | TreasuryMonitor 默认 short-circuit：空配置 log `treasury_monitor_disabled_empty` 是预期的 |
 | reorg 测试后状态错乱 | `sweepStaleMintings` 5min 兜底；如想立刻复跑，`UPDATE certificate_jobs SET status='pending'` |
+| 重建 Anvil 后 Worker 跳过新区块 | 本地链已清空但 DB checkpoint 仍属于旧链；停止 Worker 后删除 `chain_id=31337` 的 `chain_checkpoints`，再启动 Worker |
 
 ## 9. 性能冒烟
 
@@ -164,6 +168,6 @@ cast block 0xCertNFTAddress latest --rpc-url http://localhost:8545
 
 - KMS signer driver（`SIGNER_DRIVER=kms` + `SIGNER_KMS_KEY_ID`）真实接入
 - WS head 订阅优化 + reorg 深度回滚
-- CourseKey 算法升级（sha256 → keccak256）需先在合约端加 `courseKey = keccak256(abi.encodePacked(courseId))` 校验
+- CourseKey 继续保持 API / Web / Worker 共用 SHA-256；若未来迁移算法，三端和历史数据必须一起版本化
 - TreasuryMonitor YD ERC20 真接入（需要先部署 YDToken 合约）
 - 多链 / 多 RPC failover（RPCPool 现有 swap 逻辑已就绪）

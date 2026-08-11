@@ -55,32 +55,32 @@ type LogDecoder interface {
 
 // Metrics 暴露最小指标集合（计数器）；生产可替换为 expvar / Prometheus。
 type Metrics struct {
-	HeadsObserved       atomic.Int64
-	HeadsReorged        atomic.Int64
-	LogsDecoded         atomic.Int64
-	LogsIgnored         atomic.Int64
-	RPCErrors           atomic.Int64
-	RPCHTTPError        atomic.Int64
-	RPCWSError          atomic.Int64
-	RPCSwapEvents       atomic.Int64
-	GapDetected         atomic.Int64
-	CheckpointSave      atomic.Int64
-	CheckpointSaveFail  atomic.Int64
-	Backfills           atomic.Int64
-	ApplyErrors         atomic.Int64
-	WSConnects          atomic.Int64
-	HTTPPolls           atomic.Int64
-	WSHeadsDropped      atomic.Int64
+	HeadsObserved         atomic.Int64
+	HeadsReorged          atomic.Int64
+	LogsDecoded           atomic.Int64
+	LogsIgnored           atomic.Int64
+	RPCErrors             atomic.Int64
+	RPCHTTPError          atomic.Int64
+	RPCWSError            atomic.Int64
+	RPCSwapEvents         atomic.Int64
+	GapDetected           atomic.Int64
+	CheckpointSave        atomic.Int64
+	CheckpointSaveFail    atomic.Int64
+	Backfills             atomic.Int64
+	ApplyErrors           atomic.Int64
+	WSConnects            atomic.Int64
+	HTTPPolls             atomic.Int64
+	WSHeadsDropped        atomic.Int64
 	ShutdownDrainTimedOut atomic.Bool
 }
 
 // Snapshot 拷贝当前指标值（返回结构体便于 slog）。
 type MetricsSnapshot struct {
-	HeadsObserved, HeadsReorged, LogsDecoded, LogsIgnored int64
-	RPCErrors, RPCHTTPError, RPCWSError, RPCSwapEvents   int64
+	HeadsObserved, HeadsReorged, LogsDecoded, LogsIgnored      int64
+	RPCErrors, RPCHTTPError, RPCWSError, RPCSwapEvents         int64
 	GapDetected, CheckpointSave, CheckpointSaveFail, Backfills int64
-	ApplyErrors, WSConnects, HTTPPolls, WSHeadsDropped   int64
-	ShutdownDrainTimedOut                                bool
+	ApplyErrors, WSConnects, HTTPPolls, WSHeadsDropped         int64
+	ShutdownDrainTimedOut                                      bool
 }
 
 // Snapshot ...
@@ -132,6 +132,12 @@ type Config struct {
 	CheckpointStore CheckpointStore
 	// RPCPool 提供主备 Client（>=1）；runner 内部管理选择。
 	RPCPool *RPCPool
+	// Addresses 限定需要扫描的合约地址；生产应至少配置 CourseMarket，
+	// 避免同 topic 的第三方事件阻塞 checkpoint。
+	Addresses []common.Address
+	// DisableSubscriptions 用于纯 HTTP RPC；此时只走 polling，避免把 HTTP
+	// endpoint 当作 WebSocket 无限重试 eth_subscribe。
+	DisableSubscriptions bool
 	// OnReorg 回调；reorg 触发时调用（admin DLQ / 通知）；nil 表示 noop。
 	OnReorg func(ctx context.Context, info ReorgInfo) error
 	// Metrics 必填；可传 &Metrics{} 即可。
@@ -311,11 +317,11 @@ func (p *RPCPool) Close() {
 
 // Runner 单一链的 indexer 主体。
 type Runner struct {
-	cfg     Config
-	store   CheckpointStore
-	head    *atomic.Pointer[Header] // 最新看到的 head
-	applied *atomic.Int64           // 跟踪 in-flight 应用数（用于 graceful shutdown）
-	wg      sync.WaitGroup
+	cfg      Config
+	store    CheckpointStore
+	head     *atomic.Pointer[Header] // 最新看到的 head
+	applied  *atomic.Int64           // 跟踪 in-flight 应用数（用于 graceful shutdown）
+	wg       sync.WaitGroup
 	stopOnce sync.Once
 	stopCh   chan struct{}
 	stopped  chan struct{}
@@ -384,7 +390,9 @@ func (r *Runner) eventLoop(ctx context.Context) {
 	// WS 订阅通道：用单独 goroutine 维护，断线时通过 reconnectCh 让主循环重连。
 	headCh := make(chan *Header, 32)
 	reconnectCh := make(chan struct{}, 1)
-	go r.subscribeLoop(ctx, headCh, reconnectCh)
+	if !r.cfg.DisableSubscriptions {
+		go r.subscribeLoop(ctx, headCh, reconnectCh)
+	}
 
 	for {
 		select {
@@ -631,6 +639,7 @@ func (r *Runner) processRange(ctx context.Context, client Client, expectedPrevHa
 	q := ethereum.FilterQuery{
 		FromBlock: big.NewInt(from),
 		ToBlock:   big.NewInt(to),
+		Addresses: r.cfg.Addresses,
 	}
 	logs, err := client.FilterLogs(ctx, q)
 	if err != nil {
@@ -663,22 +672,17 @@ func (r *Runner) processRange(ctx context.Context, client Client, expectedPrevHa
 			if r.cfg.Confirmer == nil {
 				continue
 			}
-			r.applied.Add(1)
-			r.wg.Add(1)
-			go func(in workerorder.ApplyInput) {
-				defer r.wg.Done()
-				defer r.applied.Add(-1)
-				// 即使父 ctx 已取消，apply 已经启动；让它跑完以保证
-				// 事务一致性（confirmer 内部会有自己的 short ctx）。
-				_, state, err := r.cfg.Confirmer.Apply(ctx, in)
-				if err != nil {
-					r.cfg.Metrics.ApplyErrors.Add(1)
-					r.cfg.Logger.Error("apply_failed",
-						"orderId", in.OrderID.String(), "err", err.Error())
-					return
-				}
-				r.cfg.Logger.Info("apply_ok", "orderId", in.OrderID.String(), "state", state)
-			}(in)
+			// Apply 必须成功后才能推进 checkpoint。链上交易可能先于前端的
+			// txHash 上报被扫到，此时 ErrOrderNotFound 应让本 range 下轮重试，
+			// 不能异步失败后仍把该区块永久跳过。
+			_, state, err := r.cfg.Confirmer.Apply(ctx, in)
+			if err != nil {
+				r.cfg.Metrics.ApplyErrors.Add(1)
+				r.cfg.Logger.Error("apply_failed",
+					"orderId", in.OrderID.String(), "err", err.Error())
+				return nil, fmt.Errorf("apply event: %w", err)
+			}
+			r.cfg.Logger.Info("apply_ok", "orderId", in.OrderID.String(), "state", state)
 		}
 	}
 	// 拉 to 块 header 以获取 hash，供 Checkpoint.LastBlockHash 持久化。
@@ -760,8 +764,8 @@ func (r *Runner) flushCheckpoint(_ context.Context) {
 	if cp == nil {
 		// 没记录可 flush；落一条从 0 开始的 baseline。
 		cp = &Checkpoint{
-			ChainID:  r.cfg.ChainID,
-			Consumer: r.cfg.Consumer,
+			ChainID:   r.cfg.ChainID,
+			Consumer:  r.cfg.Consumer,
 			NextBlock: 0,
 		}
 	}
@@ -802,6 +806,11 @@ func (r *Runner) drainInFlight() {
 func retryBackoff(attempt int) time.Duration {
 	if attempt < 0 {
 		attempt = 0
+	}
+	// 2^attempt 在转换为 time.Duration 前必须封顶；否则大 attempt 的
+	// float64 会溢出为负 duration，time.After 立即返回并形成 busy loop。
+	if attempt >= 7 {
+		return 10 * time.Second
 	}
 	d := time.Duration(math.Pow(2, float64(attempt))) * 100 * time.Millisecond
 	if d > 10*time.Second {
