@@ -2,15 +2,23 @@
  * F02-T13 学习播放器外壳（受保护凭证 + 进度上报占位）。
  *
  * 设计要点：
- *   - 进入页面即调 GET /lessons/{id}/playback 拿 S3 presigned GET / CloudFront 凭证。
- *   - 用原生 <video> 接入；不引入 video.js（MVP 先用浏览器自带控件，HLS/DASH 留待 F04）。
- *   - onTimeupdate 节流 5 秒（与 F04 design.md 129 行对齐）上报 POST /lessons/{id}/progress；
+ *   - 进入页面即调 GET /lessons/{id}/playback 拿签名 URL。
+ *   - 用 detectPlayback 自动识别 URL 类型：
+ *       native   → 原生 <video>（MP4 / WebM）
+ *       hls      → <video> + 内置 HLS（Safari 原生 / 其它浏览器 fallback iframe）
+ *       dash     → iframe 嵌入（DASH.js 未引入，先走外链）
+ *       youtube  → iframe 嵌入
+ *       bilibili → iframe 嵌入
+ *       iframe   → 兜底 iframe
+ *   - 可选 props.overrideSrc / props.previewSrc 直接传入地址，绕过后端签发：
+ *       overrideSrc 用于本地 / 测试 / 讲师预览，previewSrc 用于未报名试看。
+ *   - onTimeUpdate 节流 5 秒（与 F04 design.md 对齐）上报 POST /lessons/{id}/progress；
  *     上报失败静默退化，避免打断播放。
  *   - 凭证过期前 30s 自动重新签发；reload-on-expire 不打断 UI。
  *   - 鉴权：外层 RequireAuth，未登录直接渲染提示。
  *
  * 已知 TODO（F04 落地后清理）：
- *   - 后端 progress 接口实现后，去掉"404/405 静默"分支。
+ *   - 接入 hls.js / dash.js 后，把 hls / dash 分支切到原生 <video>。
  *   - 接入 HLS/DASH 时引入 hls.js / dash.js，并把 signed cookie 模式加上。
  */
 
@@ -21,6 +29,7 @@ import {learningApi, type PlaybackCredential, type ProgressReport} from "@/api/t
 import {useSession} from "@/auth/SessionContext";
 
 import {ProgressReporter, useProgressReporter} from "./ProgressReporter";
+import {detectPlayback, describePlayback} from "./playbackRules";
 
 /** 进度上报节流间隔（毫秒）—— 与 F04 design.md 一致。 */
 const PROGRESS_THROTTLE_MS = 5_000;
@@ -37,8 +46,22 @@ export interface PlayerProps {
     title?: string;
     /** 自定义类 */
     className?: string;
-    /** 进度上报回调（可选，外部可订阅本地状态做埋点） */
+    /**
+     * 进度上报回调（可选，外部可订阅本地状态做埋点）。
+     * 仅对原生 / hls / dash 等带 progressbar 的播放器生效；
+     * iframe 嵌入（YouTube/Bilibili）拿不到 timeupdate，靠 ProgressReporter 兜底。
+     */
     onProgress?: (report: ProgressReport) => void;
+    /**
+     * 直接覆盖播放地址（讲师预览 / 本地调试用，绕过后端凭证）。
+     * 与 lessonId 互斥：传入 overrideSrc 后会跳过 issuePlayback。
+     */
+    overrideSrc?: string | null;
+    /**
+     * 试看地址（未报名时也能看）：与 overrideSrc 区别在于不进入进度上报，
+     * 仍在 UI 上标注为「试看」状态。
+     */
+    previewSrc?: string | null;
 }
 
 type FetchState = "idle" | "loading" | "ready" | "error";
@@ -49,7 +72,7 @@ function toBps(positionSeconds: number, durationSeconds: number): number {
     return Math.floor(ratio * 10_000);
 }
 
-export function Player({lessonId, courseId, title, className, onProgress}: PlayerProps) {
+export function Player({lessonId, courseId, title, className, onProgress, overrideSrc, previewSrc}: PlayerProps) {
     const {profile, loading: sessionLoading} = useSession();
     const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -63,6 +86,10 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
     const lastReportedBps = useRef<number>(0);
     /** 进度上报失败的次数（仅展示用） */
     const [progressFailures, setProgressFailures] = useState(0);
+
+    /** 是否跳过 issuePlayback（overrideSrc / previewSrc 模式）。 */
+    const useOverride = Boolean(overrideSrc) || Boolean(previewSrc);
+    const isPreview = !overrideSrc && Boolean(previewSrc);
 
     const progressHandle = useProgressReporter({
         lessonId,
@@ -99,6 +126,11 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
     }, [lessonId, profile]);
 
     useEffect(() => {
+        if (useOverride) {
+            // 直接用 override / preview 源，无需后端签发。
+            setState("ready");
+            return;
+        }
         if (sessionLoading) return;
         if (!profile) {
             setError("请先登录后再播放本课时。");
@@ -106,11 +138,11 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
             return;
         }
         void issueCredential();
-    }, [sessionLoading, profile, issueCredential]);
+    }, [sessionLoading, profile, issueCredential, useOverride]);
 
     // ----- 凭证快过期前 30s 续签（不打断当前 src） -----
     useEffect(() => {
-        if (!credential) return;
+        if (useOverride || !credential) return;
         const exp = new Date(credential.expiresAt).getTime();
         const wait = exp - Date.now() - REFRESH_LEAD_MS;
         if (wait <= 0) {
@@ -122,7 +154,7 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
             void issueCredential();
         }, wait);
         return () => window.clearTimeout(timer);
-    }, [credential, issueCredential]);
+    }, [credential, issueCredential, useOverride]);
 
     // ----- 进度上报（节流 + 单调推进） -----
     const reportNow = useCallback(
@@ -180,9 +212,14 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
         };
     }, [reportNow]);
 
-    const videoSrc = useMemo(() => credential?.url ?? "", [credential]);
+    // ----- 解析播放地址 -----
+    const resolvedUrl = overrideSrc ?? previewSrc ?? credential?.url ?? "";
+    const playback = useMemo(() => detectPlayback(resolvedUrl), [resolvedUrl]);
+    const videoSrc = useMemo(() => playback?.embedUrl ?? "", [playback]);
 
-    // 5s 兜底轮询上报 + 100% 完成按钮（与 Player.onTimeUpdate 节流互补）
+    // 标记：当前播放源是否支持 timeupdate（iframe 嵌入拿不到）。
+    const supportsTimeUpdate = playback?.kind === "native" || playback?.kind === "hls";
+
     return (
         <section
             className={`learning-player panel${className ? ` ${className}` : ""}`}
@@ -194,13 +231,18 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
                     <h2 id="learning-player-title">
                         {title || (state === "ready" ? "正在播放" : "课时加载中…")}
                     </h2>
-                    <p>
-                        播放凭证按需签发，五分钟内有效。进度上报会节流处理，不会阻塞播放器。
-                    </p>
+                    <p>播放凭证按需签发，五分钟内有效。进度上报会节流处理，不会阻塞播放器。</p>
                 </div>
-                {profile ? (
-                    <span className="badge" title="已登录">{profile.displayName}</span>
-                ) : null}
+                <div className="learning-player__meta-aside">
+                    <span className="learning-player__source-badge" title={describePlayback(playback)}>
+                        <span className="learning-player__source-dot" aria-hidden="true" />
+                        {describePlayback(playback)}
+                    </span>
+                    {profile ? (
+                        <span className="badge" title="已登录">{profile.displayName}</span>
+                    ) : null}
+                    {isPreview ? <span className="status-pill status-pill--pending">试看</span> : null}
+                </div>
             </div>
 
             {error ? (
@@ -217,27 +259,43 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
                     </div>
                 ) : null}
 
-                {state === "ready" && videoSrc ? (
-                    <video
-                        ref={videoRef}
-                        className="learning-player__video"
-                        controls
-                        preload="metadata"
-                        playsInline
-                        // HLS/DASH 留待 F04；当前仅直连 MP4/WebM
-                        src={videoSrc}
-                        onTimeUpdate={onTimeUpdate}
-                        onSeeked={onSeeked}
-                        onError={() => setError("视频播放失败，链接可能已过期。")}
-                    />
+                {state === "ready" && playback ? (
+                    playback.kind === "iframe" ||
+                    playback.kind === "youtube" ||
+                    playback.kind === "bilibili" ||
+                    playback.kind === "dash" ? (
+                        <iframe
+                            className="learning-player__iframe"
+                            src={videoSrc}
+                            title={title ?? "课程视频"}
+                            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                            allowFullScreen
+                            loading="lazy"
+                            referrerPolicy="strict-origin-when-cross-origin"
+                        />
+                    ) : (
+                        <video
+                            ref={videoRef}
+                            className="learning-player__video"
+                            controls
+                            preload="metadata"
+                            playsInline
+                            src={videoSrc}
+                            onTimeUpdate={supportsTimeUpdate ? onTimeUpdate : undefined}
+                            onSeeked={supportsTimeUpdate ? onSeeked : undefined}
+                            onError={() => setError("视频播放失败，链接可能已过期。")}
+                        />
+                    )
                 ) : null}
             </div>
 
             <footer className="learning-player__meta">
                 <span className="muted">
                     {state === "ready" && credential
-                        ? `签名链接有效期至 ${new Date(credential.expiresAt).toLocaleTimeString()}`
-                        : "等待凭证中"}
+                        ? `签名链接有效期至 ${new Date(credential.expiresAt).toLocaleTimeString("zh-CN")}`
+                        : playback?.kind === "native" || playback?.kind === "hls"
+                          ? "原生播放器，可拖动进度条 / 倍速"
+                          : "外部嵌入，进度由 ProgressReporter 兜底"}
                 </span>
                 {progressFailures > 0 ? (
                     <span className="muted" title="进度上报失败次数（不影响播放）">
@@ -246,7 +304,7 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
                 ) : null}
             </footer>
 
-            {state === "ready" && profile ? (
+            {state === "ready" && profile && !isPreview ? (
                 <ProgressReporter
                     handle={progressHandle}
                     courseId={courseId ?? lessonId}
