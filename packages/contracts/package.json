@@ -10,17 +10,17 @@
     "coverage": "forge coverage",
     "format": "forge fmt",
     "format:check": "forge fmt --check",
-    "deploy:sepolia": "forge script script/DeployCounter.s.sol:DeployCounter --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
-    "deploy:sepolia:no-verify": "forge script script/DeployCounter.s.sol:DeployCounter --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
-    "deploy:notepad:sepolia": "forge script script/DeployNotepad.s.sol:DeployNotepad --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
-    "deploy:notepad:sepolia:no-verify": "forge script script/DeployNotepad.s.sol:DeployNotepad --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
-    "deploy:course-market:sepolia": "forge script script/DeployCourseMarket.s.sol:DeployCourseMarket --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
-    "deploy:course-market:sepolia:no-verify": "forge script script/DeployCourseMarket.s.sol:DeployCourseMarket --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
-    "deploy:yd-token:sepolia": "forge script script/DeployYDToken.s.sol:DeployYDToken --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
-    "deploy:yd-token:sepolia:no-verify": "forge script script/DeployYDToken.s.sol:DeployYDToken --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
-    "deploy:certificate-nft:sepolia": "forge script script/DeployCertificateNFT.s.sol:DeployCertificateNFT --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
-    "deploy:certificate-nft:sepolia:no-verify": "forge script script/DeployCertificateNFT.s.sol:DeployCertificateNFT --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
-    "verify:sepolia": "forge verify-contract --chain sepolia --etherscan-api-key $ETHERSCAN_API_KEY --watch",
+    "deploy:sepolia": "dotenv -f ./.env run -- forge script script/DeployCounter.s.sol:DeployCounter --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
+    "deploy:sepolia:no-verify": "dotenv -f ./.env run -- forge script script/DeployCounter.s.sol:DeployCounter --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
+    "deploy:notepad:sepolia": "dotenv -f ./.env run -- forge script script/DeployNotepad.s.sol:DeployNotepad --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
+    "deploy:notepad:sepolia:no-verify": "dotenv -f ./.env run -- forge script script/DeployNotepad.s.sol:DeployNotepad --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
+    "deploy:course-market:sepolia": "dotenv -f ./.env run -- forge script script/DeployCourseMarket.s.sol:DeployCourseMarket --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
+    "deploy:course-market:sepolia:no-verify": "dotenv -f ./.env run -- forge script script/DeployCourseMarket.s.sol:DeployCourseMarket --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
+    "deploy:yd-token:sepolia": "dotenv -f ./.env run -- forge script script/DeployYDToken.s.sol:DeployYDToken --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
+    "deploy:yd-token:sepolia:no-verify": "dotenv -f ./.env run -- forge script script/DeployYDToken.s.sol:DeployYDToken --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
+    "deploy:certificate-nft:sepolia": "dotenv -f ./.env run -- forge script script/DeployCertificateNFT.s.sol:DeployCertificateNFT --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
+    "deploy:certificate-nft:sepolia:no-verify": "dotenv -f ./.env run -- forge script script/DeployCertificateNFT.s.sol:DeployCertificateNFT --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
+    "verify:sepolia": "dotenv -f ./.env run -- forge verify-contract --chain sepolia --etherscan-api-key $ETHERSCAN_API_KEY --watch",
     "export:abi": "node ./script/export-abi.mjs Counter Notepad CourseMarket YDToken CertificateNFT",
     "clean": "forge clean"
   },
@@ -29,6 +29,7 @@
     "forge-std": "github:foundry-rs/forge-std#v1.9.6"
   },
   "devDependencies": {
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "dotenv-cli": "^7.3.0"
   }
 }
