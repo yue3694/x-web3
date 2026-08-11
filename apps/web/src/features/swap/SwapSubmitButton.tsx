@@ -26,27 +26,27 @@ interface SwapSubmitButtonProps {
 }
 
 function label(p: SwapSubmitButtonProps): string {
-  if (!p.isConnected) return "Connect wallet to swap";
+  if (!p.isConnected) return "连接钱包以兑换";
   switch (p.state) {
     case "quoting":
-      return "Fetching quote…";
+      return "正在获取报价…";
     case "checking":
-      return "Checking balance…";
+      return "正在检查余额…";
     case "approving":
-      return `Approve ${p.tokenIn} in wallet…`;
+      return `请在钱包中授权 ${p.tokenIn}…`;
     case "signing":
-      return "Sign in wallet…";
+      return "请在钱包中签名…";
     case "confirming":
-      return "Confirming on-chain…";
+      return "等待链上确认…";
     case "done":
-      return "Swap again";
+      return "再次兑换";
     case "failed":
-      return "Retry swap";
+      return "重试兑换";
     case "idle":
       // 阻断原因优先于默认文案：用户要知道为什么按钮是灰的。
-      if (p.impactBlocked) return "Price impact too high";
-      if (p.slippageBlocked) return "Slippage too high";
-      return `Swap ${p.tokenIn} for ${p.tokenOut}`;
+      if (p.impactBlocked) return "价格影响过高";
+      if (p.slippageBlocked) return "滑点过高";
+      return `用 ${p.tokenIn} 兑换 ${p.tokenOut}`;
   }
 }
 
@@ -58,9 +58,9 @@ export function SwapSubmitButton(props: SwapSubmitButtonProps) {
         className="btn btn--primary"
         onClick={props.onSwitchChain}
         disabled={props.isSwitching}
-        aria-label={`Switch network to chain ${TARGET_CHAIN_ID}`}
+        aria-label={`切换到 chain ${TARGET_CHAIN_ID}`}
       >
-        {props.isSwitching ? "Switching…" : `Switch to ${TARGET_CHAIN_NAME}`}
+        {props.isSwitching ? "切换中…" : `切换到 ${TARGET_CHAIN_NAME}`}
       </button>
     );
   }

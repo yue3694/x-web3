@@ -30,11 +30,11 @@ import type { OrderListResponse, OrderRecord, OrderStatus } from "./MyOrders.typ
 const PAGE_SIZE = 50; // 对齐 server default limit (max 100); 单次拉到本地做 status 过滤 + 分页
 
 const STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
-    { value: "all", label: "All" },
-    { value: "pending", label: "Pending" },
-    { value: "confirmed", label: "Confirmed" },
-    { value: "failed", label: "Failed" },
-    { value: "dead", label: "Dead" },
+    { value: "all", label: "全部" },
+    { value: "pending", label: "待处理" },
+    { value: "confirmed", label: "已确认" },
+    { value: "failed", label: "失败" },
+    { value: "dead", label: "已失效" },
 ];
 
 interface MyOrdersProps {
@@ -64,9 +64,9 @@ export function MyOrders({ className }: MyOrdersProps) {
             <section className={`my-orders panel${className ? ` ${className}` : ""}`}>
                 <div className="section-heading">
                     <div>
-                        <span className="eyebrow">Account</span>
-                        <h2>My orders</h2>
-                        <p>Sign in to view your purchase history.</p>
+                        <span className="eyebrow">账户</span>
+                        <h2>我的订单</h2>
+                        <p>请先登录，查看你的购买记录。</p>
                     </div>
                 </div>
             </section>
@@ -78,7 +78,7 @@ export function MyOrders({ className }: MyOrdersProps) {
     const errorMessage = query.error instanceof ApiClientError
         ? query.error.message
         : query.error
-            ? "Unable to load your orders."
+            ? "无法加载你的订单。"
             : null;
 
     const items = query.data?.items ?? [];
@@ -109,27 +109,27 @@ export function MyOrders({ className }: MyOrdersProps) {
         >
             <header className="section-heading">
                 <div>
-                    <span className="eyebrow">Account</span>
-                    <h2 id="my-orders-title">My orders</h2>
-                    <p>Every YD purchase you have made, with on-chain receipts.</p>
+                    <span className="eyebrow">账户</span>
+                    <h2 id="my-orders-title">我的订单</h2>
+                    <p>你用 YD 完成的每一笔购买，都附有链上回执。</p>
                 </div>
                 {items.length > 0 ? (
-                    <dl className="my-orders__stats" aria-label="Order status summary">
+                    <dl className="my-orders__stats" aria-label="订单状态汇总">
                         <div className="my-orders__stat my-orders__stat--all">
-                            <dt>Total</dt>
+                            <dt>合计</dt>
                             <dd>{counts.all}</dd>
                         </div>
                         <div className="my-orders__stat my-orders__stat--confirmed">
-                            <dt>Confirmed</dt>
+                            <dt>已确认</dt>
                             <dd>{counts.confirmed}</dd>
                         </div>
                         <div className="my-orders__stat my-orders__stat--pending">
-                            <dt>Pending</dt>
+                            <dt>待处理</dt>
                             <dd>{counts.pending}</dd>
                         </div>
                         {counts.failed + counts.dead > 0 ? (
                             <div className="my-orders__stat my-orders__stat--failed">
-                                <dt>Failed / Dead</dt>
+                                <dt>失败 / 已失效</dt>
                                 <dd>{counts.failed + counts.dead}</dd>
                             </div>
                         ) : null}
@@ -139,15 +139,15 @@ export function MyOrders({ className }: MyOrdersProps) {
 
             {routeMissing ? (
                 <div className="notice notice--error" role="alert">
-                    The <code>GET /me/orders</code> endpoint is not wired in the current API build.
-                    Please ask the backend track to expose the route.
+                    当前 API 尚未挂载 <code>GET /me/orders</code> 路由，
+                    请联系后端同学开放该接口。
                 </div>
             ) : null}
             {errorMessage && !routeMissing ? (
                 <div className="notice notice--error" role="alert">
                     <span>{errorMessage}</span>{" "}
                     <button type="button" className="btn--ghost" onClick={() => void query.refetch()}>
-                        Retry
+                        重试
                     </button>
                 </div>
             ) : null}
@@ -156,7 +156,7 @@ export function MyOrders({ className }: MyOrdersProps) {
                 <div
                     className="filter-chips"
                     role="tablist"
-                    aria-label="Filter orders by status"
+                    aria-label="按状态筛选订单"
                 >
                     {STATUS_OPTIONS.map((opt) => {
                         const isActive = status === opt.value;
@@ -190,7 +190,7 @@ export function MyOrders({ className }: MyOrdersProps) {
                     id="my-orders-list"
                     className="my-orders__list"
                     aria-busy="true"
-                    aria-label="Loading orders"
+                    aria-label="订单加载中"
                 >
                     {[0, 1, 2].map((i) => (
                         <li key={i} className="my-orders__skeleton">
@@ -217,9 +217,9 @@ export function MyOrders({ className }: MyOrdersProps) {
                                 <path d="M3 7h18l-1.5 11a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-1.7L3 7Z" />
                                 <path d="M8 7V5a4 4 0 0 1 8 0v2" />
                             </svg>
-                            <h3>No orders yet</h3>
-                            <p>Browse the catalog to enroll in your first course.</p>
-                            <a href="/courses" className="btn--primary">Browse catalog</a>
+                            <h3>暂无订单</h3>
+                            <p>去课程市场挑选第一门课，开启学习之旅。</p>
+                            <a href="/courses" className="btn--primary">浏览课程</a>
                         </>
                     ) : (
                         <>
@@ -236,14 +236,14 @@ export function MyOrders({ className }: MyOrdersProps) {
                                 <circle cx="11" cy="11" r="7" />
                                 <path d="m20 20-3.5-3.5" />
                             </svg>
-                            <h3>No {status} orders</h3>
-                            <p>Nothing matches the current filter.</p>
+                            <h3>暂无「{status}」订单</h3>
+                            <p>当前筛选下没有匹配的订单。</p>
                             <button
                                 type="button"
                                 className="btn--ghost"
                                 onClick={() => setStatus("all")}
                             >
-                                Show all orders
+                                查看全部订单
                             </button>
                         </>
                     )}
@@ -253,14 +253,14 @@ export function MyOrders({ className }: MyOrdersProps) {
                     <ol
                         id="my-orders-list"
                         className="my-orders__list"
-                        aria-label="My orders"
+                        aria-label="我的订单"
                     >
                         {pageItems.map((order) => (
                             <OrderRow key={order.id} order={order} />
                         ))}
                     </ol>
 
-                    <nav className="my-orders__pager" aria-label="Pagination">
+                    <nav className="my-orders__pager" aria-label="分页">
                         <button
                             type="button"
                             className="btn--ghost"
@@ -279,10 +279,10 @@ export function MyOrders({ className }: MyOrdersProps) {
                                 <path d="M19 12H5" />
                                 <path d="m11 18-6-6 6-6" />
                             </svg>
-                            Prev
+                            上一页
                         </button>
                         <span aria-live="polite" className="my-orders__pager-page">
-                            Page {page}
+                            第 {page} 页
                         </span>
                         <button
                             type="button"
@@ -290,7 +290,7 @@ export function MyOrders({ className }: MyOrdersProps) {
                             disabled={!hasMore || query.isFetching}
                             onClick={() => setPage((p) => p + 1)}
                         >
-                            Next
+                            下一页
                             <svg
                                 aria-hidden="true"
                                 viewBox="0 0 24 24"

@@ -7,18 +7,18 @@
 import type {Comment, ModerationStatus} from "@/api/types";
 
 const STATUS_LABEL: Record<ModerationStatus, string> = {
-    approved: "Approved",
-    pending: "Pending review",
-    rejected: "Rejected",
+    approved: "已通过",
+    pending: "待审核",
+    rejected: "未通过",
 };
 
 export function formatCommentTime(iso: string): string {
     const date = new Date(iso);
     if (Number.isNaN(date.valueOf())) return iso;
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("zh-CN", {
         year: "numeric",
-        month: "short",
-        day: "numeric",
+        month: "2-digit",
+        day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
     }).format(date);
@@ -48,7 +48,7 @@ export function CommentItem({comment, isAuthor, deleting, onDelete, className}: 
             <header className="comment-item__head">
                 <div>
                     <span className="comment-item__author">
-                        {comment.userDisplayName || (isAuthor ? "You" : "Anonymous")}
+                        {comment.userDisplayName || (isAuthor ? "我" : "匿名用户")}
                     </span>
                     <time className="comment-item__time" dateTime={comment.createdAt}>
                         {formatCommentTime(comment.createdAt)}
@@ -65,7 +65,7 @@ export function CommentItem({comment, isAuthor, deleting, onDelete, className}: 
                         disabled={deleting}
                         onClick={() => onDelete(comment.id)}
                     >
-                        {deleting ? "Deleting…" : "Delete"}
+                        {deleting ? "删除中…" : "删除"}
                     </button>
                 </footer>
             ) : null}

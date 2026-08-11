@@ -138,7 +138,7 @@ export function ProgressReporter({handle, courseId, courseTitle, className}: Pro
             if (cause instanceof ApiClientError) {
                 setErrorMsg(`${cause.code}: ${cause.message}`);
             } else {
-                setErrorMsg("Failed to mark the course as complete.");
+                setErrorMsg("无法将课程标记为已完成。");
             }
         }
     }, [courseId, navigate, state]);
@@ -150,19 +150,17 @@ export function ProgressReporter({handle, courseId, courseTitle, className}: Pro
                 <div className="progress-reporter__fill" style={{width: `${handle.pct}%`}} />
             </div>
             <div className="progress-reporter__meta">
-                <span className="muted">{handle.pct}% watched</span>
+                <span className="muted">已观看 {handle.pct}%</span>
                 {handle.failureCount > 0 ? (
                     <span className="muted" title="进度上报失败次数（不影响播放）">
-                        sync retries: {handle.failureCount}
+                        同步重试：{handle.failureCount}
                     </span>
                 ) : null}
             </div>
             {handle.isComplete && state !== "success" ? (
                 <div className="progress-reporter__complete">
                     <p>
-                        You have watched the entire lesson
-                        {courseTitle ? ` “${courseTitle}”` : ""}. Mark this course as complete to mint
-                        your certificate.
+                        你已完整观看{courseTitle ? `《${courseTitle}》` : "本课时"}，点击下方按钮将课程标记为完成，即可铸造证书。
                     </p>
                     <button
                         type="button"
@@ -170,20 +168,20 @@ export function ProgressReporter({handle, courseId, courseTitle, className}: Pro
                         disabled={state === "submitting"}
                         onClick={() => void onComplete()}
                     >
-                        {state === "submitting" ? "Submitting…" : "Mark as complete"}
+                        {state === "submitting" ? "提交中…" : "标记为完成"}
                     </button>
                 </div>
             ) : null}
             {state === "success" ? (
                 <div className="notice notice--ok" role="status">
-                    Course marked complete. Redirecting to your certificates…
+                    课程已标记为完成。正在跳转到你的证书页…
                 </div>
             ) : null}
             {state === "error" ? (
                 <div className="notice notice--error" role="alert">
                     {errorMsg}{" "}
                     <button type="button" className="btn--ghost" onClick={() => void onComplete()}>
-                        Retry
+                        重试
                     </button>
                 </div>
             ) : null}

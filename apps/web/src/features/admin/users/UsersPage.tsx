@@ -117,7 +117,7 @@ export function UsersPage() {
     }, [load, hasPermission]);
 
     if (!hasPermission("SYSTEM_ADMIN")) {
-        // AdminLayout 已经渲染了"Access denied"，这里直接 null 即可。
+        // AdminLayout 已经渲染了"无权访问"，这里直接 null 即可。
         return null;
     }
 
@@ -128,19 +128,17 @@ export function UsersPage() {
     return (
             <section className="panel" style={sectionStyle} aria-labelledby="users-title">
                 <header style={headerStyle}>
-                    <span className="eyebrow">Admin · Users</span>
-                    <h2 id="users-title">Users &amp; roles</h2>
+                    <span className="eyebrow">管理 · 用户</span>
+                    <h2 id="users-title">用户与角色</h2>
                     <p style={{color: "var(--fg-muted)", margin: 0}}>
-                        Grant or revoke system roles. Every change is recorded in the
-                        audit log.
+                        授予或收回系统角色，所有变更都会写入审计日志。
                     </p>
                 </header>
 
                 {routeMissing ? (
                     <div className="notice notice--error" role="alert" style={noticeStyle}>
-                        The <code>GET /admin/users</code> endpoint is not wired in the
-                        current API build. Ask the backend track to expose the route
-                        (handler: <code>apps/api/internal/admin/handlers/users.go</code>).
+                        当前 API 版本尚未挂载 <code>GET /admin/users</code> 接口，请联系后端在
+                        （handler：<code>apps/api/internal/admin/handlers/users.go</code>）暴露该路由。
                     </div>
                 ) : null}
 
@@ -152,23 +150,23 @@ export function UsersPage() {
                             className="btn--ghost"
                             onClick={() => void load()}
                         >
-                            Retry
+                            重试
                         </button>
                     </div>
                 ) : null}
 
                 <div role="table" aria-rowcount={total}>
                     <div role="row" style={tableHeadStyle}>
-                        <span role="columnheader">User</span>
-                        <span role="columnheader">Wallets</span>
-                        <span role="columnheader">Roles</span>
+                        <span role="columnheader">用户</span>
+                        <span role="columnheader">钱包</span>
+                        <span role="columnheader">角色</span>
                         <span role="columnheader" style={{textAlign: "right"}}>
-                            Actions
+                            操作
                         </span>
                     </div>
 
                     {loading ? (
-                        <ol style={listStyle} aria-busy="true" aria-label="Loading users">
+                        <ol style={listStyle} aria-busy="true" aria-label="正在加载用户">
                             {[0, 1, 2].map((i) => (
                                 <li
                                     key={i}
@@ -182,11 +180,11 @@ export function UsersPage() {
                     ) : items.length === 0 && !routeMissing && !error ? (
                         <div className="empty-state" style={noticeStyle}>
                             <span>◇</span>
-                            <h3>No users yet</h3>
-                            <p>No accounts have signed in.</p>
+                            <h3>暂无用户</h3>
+                            <p>还没有账号登录过。</p>
                         </div>
                     ) : (
-                        <ol style={listStyle} aria-label="Users">
+                        <ol style={listStyle} aria-label="用户列表">
                             {items.map((u) => (
                                 <UserRow
                                     key={u.id}
@@ -199,9 +197,9 @@ export function UsersPage() {
                     )}
                 </div>
 
-                <footer style={pagerStyle} aria-label="Pagination">
+                <footer style={pagerStyle} aria-label="分页">
                     <span>
-                        Page {page} / {lastPage} · {total} total
+                        第 {page} / {lastPage} 页 · 共 {total} 条
                     </span>
                     <button
                         type="button"
@@ -209,7 +207,7 @@ export function UsersPage() {
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
                         disabled={!canPrev || loading}
                     >
-                        ← Prev
+                        ← 上一页
                     </button>
                     <button
                         type="button"
@@ -217,7 +215,7 @@ export function UsersPage() {
                         onClick={() => setPage((p) => p + 1)}
                         disabled={!canNext || loading}
                     >
-                        Next →
+                        下一页 →
                     </button>
                 </footer>
             </section>

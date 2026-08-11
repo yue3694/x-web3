@@ -19,9 +19,9 @@ import {useSession} from "@/auth/SessionContext";
 import {CommentStatusBadge} from "@/features/catalog/CommentItem";
 
 const STATUS_HINT: Record<ModerationStatus, string> = {
-    approved: "Visible to everyone on the course page.",
-    pending: "Awaiting moderation — not yet public.",
-    rejected: "Did not pass moderation. Edit and resubmit if you have access.",
+    approved: "已对所有用户公开显示在课程页。",
+    pending: "正在等待审核，尚未公开。",
+    rejected: "未通过审核。如有权限可编辑后重新提交。",
 };
 
 interface MyCommentsProps {
@@ -32,10 +32,10 @@ interface MyCommentsProps {
 function formatDate(iso: string): string {
     const date = new Date(iso);
     if (Number.isNaN(date.valueOf())) return iso;
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("zh-CN", {
         year: "numeric",
-        month: "short",
-        day: "numeric",
+        month: "2-digit",
+        day: "2-digit",
     }).format(date);
 }
 
@@ -64,7 +64,7 @@ export function MyComments({className}: MyCommentsProps) {
                     setError(cause.message);
                 }
             } else {
-                setError("Unable to load your comments.");
+                setError("无法加载你的评论。");
             }
         } finally {
             setLoading(false);
@@ -81,9 +81,9 @@ export function MyComments({className}: MyCommentsProps) {
             <section className={`my-comments panel${className ? ` ${className}` : ""}`}>
                 <div className="section-heading">
                     <div>
-                        <span className="eyebrow">Account</span>
-                        <h2>My comments</h2>
-                        <p>Sign in to view the discussion history tied to your profile.</p>
+                        <span className="eyebrow">账户</span>
+                        <h2>我的评论</h2>
+                        <p>请先登录，查看与你账户关联的讨论记录。</p>
                     </div>
                 </div>
             </section>
@@ -97,7 +97,7 @@ export function MyComments({className}: MyCommentsProps) {
             await commentApi.softDelete(id);
             setItems((current) => current.filter((c) => c.id !== id));
         } catch (cause) {
-            setError(cause instanceof ApiClientError ? cause.message : "Failed to delete the comment.");
+            setError(cause instanceof ApiClientError ? cause.message : "删除评论失败。");
         } finally {
             setDeletingId(null);
         }
@@ -107,30 +107,30 @@ export function MyComments({className}: MyCommentsProps) {
         <section className={`my-comments panel${className ? ` ${className}` : ""}`} aria-labelledby="my-comments-title">
             <div className="section-heading">
                 <div>
-                    <span className="eyebrow">Account</span>
-                    <h2 id="my-comments-title">My comments</h2>
-                    <p>Every comment you have left on a course, including ones still in review.</p>
+                    <span className="eyebrow">账户</span>
+                    <h2 id="my-comments-title">我的评论</h2>
+                    <p>你在课程下发表过的所有评论，包括仍在审核中的。</p>
                 </div>
             </div>
 
             {routeMissing ? (
                 <div className="notice notice--error" role="alert">
-                    The <code>GET /me/comments</code> endpoint is not wired in the current API build.
-                    The backend repository function is ready; please ask the backend track to expose the route.
+                    当前 API 尚未挂载 <code>GET /me/comments</code> 路由。
+                    后端 repository 已就绪，请联系后端同学开放该接口。
                 </div>
             ) : null}
             {error ? <div className="notice notice--error" role="alert">{error}</div> : null}
 
             {loading ? (
-                <p className="muted">Loading your comments…</p>
+                <p className="muted">评论加载中…</p>
             ) : items.length === 0 && !routeMissing ? (
                 <div className="empty-state">
                     <span>◇</span>
-                    <h3>No comments yet</h3>
-                    <p>After purchasing a course, leave a comment to start the conversation.</p>
+                    <h3>暂无评论</h3>
+                    <p>购买课程后，发表第一条评论来开启讨论吧。</p>
                 </div>
             ) : (
-                <ol className="my-comments__list" aria-label="My comments">
+                <ol className="my-comments__list" aria-label="我的评论">
                     {items.map((comment) => (
                         <li key={comment.id} className={`my-comments__item my-comments__item--${comment.moderationStatus}`}>
                             <header>
@@ -143,9 +143,9 @@ export function MyComments({className}: MyCommentsProps) {
                                 <a
                                     className="my-comments__course"
                                     href={`#course-${comment.courseId}`}
-                                    title="Jump to course"
+                                    title="跳到课程"
                                 >
-                                    course · {comment.courseId.slice(0, 8)}…
+                                    课程 · {comment.courseId.slice(0, 8)}…
                                 </a>
                             </header>
                             <p className="my-comments__body">{comment.body}</p>
@@ -157,7 +157,7 @@ export function MyComments({className}: MyCommentsProps) {
                                     disabled={deletingId === comment.id}
                                     onClick={() => void onDelete(comment.id)}
                                 >
-                                    {deletingId === comment.id ? "Deleting…" : "Delete"}
+                                    {deletingId === comment.id ? "删除中…" : "删除"}
                                 </button>
                             </footer>
                         </li>

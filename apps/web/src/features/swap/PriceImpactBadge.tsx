@@ -22,25 +22,25 @@ interface PriceImpactBadgeProps {
 }
 
 const TONE_LABEL: Record<RiskTone, string> = {
-  ok: "Low price impact",
-  warn: "Moderate price impact",
-  danger: "High price impact",
-  blocked: `Price impact ≥ ${PRICE_IMPACT_BLOCK_PCT}% — swap blocked`,
+  ok: "价格影响较低",
+  warn: "价格影响中等",
+  danger: "价格影响较高",
+  blocked: `价格影响 ≥ ${PRICE_IMPACT_BLOCK_PCT}%，兑换已拦截`,
 };
 
 export function PriceImpactBadge({pct, loading = false}: PriceImpactBadgeProps) {
   if (loading) {
     return (
       <span className="price-impact-badge price-impact-badge--loading" aria-busy="true">
-        Price impact <strong>…</strong>
+        价格影响 <strong>…</strong>
       </span>
     );
   }
 
   if (pct === null) {
     return (
-      <span className="price-impact-badge price-impact-badge--ok" title="No quote yet">
-        Price impact <strong>—</strong>
+      <span className="price-impact-badge price-impact-badge--ok" title="暂无报价">
+        价格影响 <strong>—</strong>
       </span>
     );
   }
@@ -56,8 +56,8 @@ export function PriceImpactBadge({pct, loading = false}: PriceImpactBadgeProps) 
       // 高风险才打断读屏用户，低风险保持安静。
       role={tone === "danger" || tone === "blocked" ? "alert" : undefined}
     >
-      Price impact <strong>{text}</strong>
-      {tone === "blocked" ? <span className="price-impact-badge__flag"> · blocked</span> : null}
+      价格影响 <strong>{text}</strong>
+      {tone === "blocked" ? <span className="price-impact-badge__flag"> · 已拦截</span> : null}
     </span>
   );
 }

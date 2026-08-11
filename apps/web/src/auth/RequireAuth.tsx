@@ -19,12 +19,12 @@ export function RequireAuth({children, fallback}: RequireAuthProps) {
     const {profile, loading} = useSession();
 
     if (loading) {
-        return <div role="status">Loading…</div>;
+        return <div role="status">加载中…</div>;
     }
     if (!profile) {
         return (
             fallback ?? (
-                <div role="alert">Please sign in to access this page.</div>
+                <div role="alert">请先登录后再访问此页面。</div>
             )
         );
     }

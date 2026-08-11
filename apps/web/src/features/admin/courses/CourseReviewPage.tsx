@@ -33,7 +33,7 @@ export function CourseReviewPage() {
             const response = await adminApi.listCoursesForReview();
             setItems(response.items);
         } catch (cause) {
-            setError(cause instanceof ApiClientError ? `${cause.code}: ${cause.message}` : "Unable to load review queue.");
+            setError(cause instanceof ApiClientError ? `${cause.code}: ${cause.message}` : "无法加载审核队列。");
         } finally {
             setLoading(false);
         }
@@ -47,15 +47,15 @@ export function CourseReviewPage() {
         setMessage("");
         try {
             if (course.priceMinor > 0) {
-                if (!isConnected || !address) throw new Error("Connect the CourseMarket owner wallet first.");
+                if (!isConnected || !address) throw new Error("请先连接 CourseMarket 所有者钱包。");
                 if (chainId !== TARGET_CHAIN_ID) await switchChainAsync({chainId: TARGET_CHAIN_ID});
                 const marketAddress = courseMarketDeployments.target.address;
                 const tokenAddress = ydTokenDeployments.target.address;
-                if (!marketAddress || !tokenAddress || !publicClient) throw new Error("Local market, token or RPC configuration is missing.");
+                if (!marketAddress || !tokenAddress || !publicClient) throw new Error("本地缺少 Market、代币或 RPC 配置。");
 
                 const owner = await publicClient.readContract({address: marketAddress, abi: marketAbi, functionName: "owner"});
                 if (getAddress(owner) !== getAddress(address)) {
-                    throw new Error(`Publishing requires the CourseMarket owner wallet (${owner}).`);
+                    throw new Error(`发布需要使用 CourseMarket 所有者钱包（${owner}）。`);
                 }
                 const courseKey = await courseKeyFromUuid(course.id);
                 const hash = await writeContractAsync({
@@ -66,14 +66,14 @@ export function CourseReviewPage() {
                     chainId: TARGET_CHAIN_ID,
                 });
                 const receipt = await publicClient.waitForTransactionReceipt({hash});
-                if (receipt.status !== "success") throw new Error("CourseMarket configuration reverted.");
+                if (receipt.status !== "success") throw new Error("CourseMarket 配置交易已回滚。");
             }
 
             await adminApi.reviewCourse(course.id, "approve");
-            setMessage(`Published “${course.title}” on ${TARGET_CHAIN_NAME}.`);
+            setMessage(`已在 ${TARGET_CHAIN_NAME} 上发布 "${course.title}"。`);
             await load();
         } catch (cause) {
-            setError(cause instanceof Error ? cause.message : "Could not publish the course.");
+            setError(cause instanceof Error ? cause.message : "课程发布失败。");
         } finally {
             setBusy(null);
         }
@@ -84,11 +84,11 @@ export function CourseReviewPage() {
         setError("");
         setMessage("");
         try {
-            await adminApi.reviewCourse(course.id, "reject", "Return to Studio for curriculum edits.");
-            setMessage(`Returned “${course.title}” to draft. It can now be reopened in Studio.`);
+            await adminApi.reviewCourse(course.id, "reject", "退回 Studio 修改课程内容。");
+            setMessage(`已将 "${course.title}" 退回草稿，可在 Studio 中继续编辑。`);
             await load();
         } catch (cause) {
-            setError(cause instanceof Error ? cause.message : "Could not return the course to draft.");
+            setError(cause instanceof Error ? cause.message : "退回课程草稿失败。");
         } finally {
             setBusy(null);
         }
@@ -98,33 +98,33 @@ export function CourseReviewPage() {
         <section className="panel" aria-labelledby="course-review-title">
             <header className="section-heading">
                 <div>
-                    <span className="eyebrow">Admin · Courses</span>
-                    <h2 id="course-review-title">Course review</h2>
-                    <p>Publishing configures the paid course on {TARGET_CHAIN_NAME}, then opens it in the catalog.</p>
+                    <span className="eyebrow">管理 · 课程</span>
+                    <h2 id="course-review-title">课程审核</h2>
+                    <p>发布流程会先在 {TARGET_CHAIN_NAME} 上配置付费课程，然后再上架到课程市场。</p>
                 </div>
             </header>
             {error ? <div className="notice notice--error" role="alert">{error}</div> : null}
             {message ? <div className="notice notice--ok" role="status">{message}</div> : null}
             {TARGET_CHAIN_ID === 31337 && !isConnected ? (
                 <div className="notice notice--info" role="status">
-                    Local publishing needs an injected browser wallet using the Anvil deployment account. A mobile WalletConnect/Reown wallet cannot reach your computer&apos;s localhost RPC.
+                    本地发布需要使用 Anvil 部署账户注入的浏览器钱包；WalletConnect / Reown 等移动端钱包无法访问本机 localhost RPC。
                 </div>
             ) : null}
-            {loading ? <p className="muted" role="status">Loading review queue…</p> : null}
-            {!loading && items.length === 0 ? <div className="empty-state"><span>◇</span><h3>Review queue is clear</h3><p>Submitted courses will appear here.</p></div> : null}
+            {loading ? <p className="muted" role="status">正在加载审核队列…</p> : null}
+            {!loading && items.length === 0 ? <div className="empty-state"><span>◇</span><h3>审核队列已清空</h3><p>新提交的课程会出现在这里。</p></div> : null}
             <div className="page-stack">
                 {items.map((course) => (
                     <article className="card" key={course.id}>
-                        <span className="status-pill status-pill--pending_review">pending review</span>
+                        <span className="status-pill status-pill--pending_review">待审核</span>
                         <h3>{course.title}</h3>
-                        <p>{course.description || "No description."}</p>
+                        <p>{course.description || "暂无简介。"}</p>
                         <p className="muted">{course.teacherName} · {(course.priceMinor / 100).toFixed(2)} {course.currency} · v{course.currentVersion}</p>
-                        {course.lessonCount === 0 ? <div className="notice notice--warn">This version has no lessons. Return it to draft before publishing.</div> : null}
+                        {course.lessonCount === 0 ? <div className="notice notice--warn">该版本暂无课时，请先退回草稿后再发布。</div> : null}
                         <button className="btn--primary" type="button" disabled={busy !== null || course.lessonCount === 0} onClick={() => void approve(course)}>
-                            {busy === course.id ? "Publishing…" : `Publish on ${TARGET_CHAIN_NAME}`}
+                            {busy === course.id ? "正在发布…" : `在 ${TARGET_CHAIN_NAME} 上发布`}
                         </button>
                         <button className="btn--ghost" type="button" disabled={busy !== null} onClick={() => void reject(course)}>
-                            Return to draft
+                            退回草稿
                         </button>
                     </article>
                 ))}

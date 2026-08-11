@@ -15,10 +15,10 @@ interface OrderRowProps {
 }
 
 const STATUS_LABEL: Record<Exclude<OrderRecord["status"], "pending"> | "pending", string> = {
-    pending: "Pending",
-    confirmed: "Confirmed",
-    failed: "Failed",
-    dead: "Dead",
+    pending: "待处理",
+    confirmed: "已确认",
+    failed: "失败",
+    dead: "已失效",
 };
 
 function StatusBadge({ status }: { status: OrderRecord["status"] }) {
@@ -65,9 +65,9 @@ export function OrderRow({ order }: OrderRowProps) {
                     <StatusBadge status={order.status} />
                     <h3 className="my-orders__title">
                         {order.enrollmentId ? (
-                            <Link to={`/learn/${order.courseId}`}>{order.courseTitle ?? "Untitled course"}</Link>
+                            <Link to={`/learn/${order.courseId}`}>{order.courseTitle ?? "未命名课程"}</Link>
                         ) : (
-                            <span>{order.courseTitle ?? "Untitled course"}</span>
+                            <span>{order.courseTitle ?? "未命名课程"}</span>
                         )}
                     </h3>
                 </div>
@@ -77,7 +77,7 @@ export function OrderRow({ order }: OrderRowProps) {
             </header>
             <dl className="my-orders__meta">
                 <div>
-                    <dt>Price</dt>
+                    <dt>价格</dt>
                     <dd>
                         <span className="my-orders__price">
                             {order.priceYD ? order.priceYD : "—"}
@@ -86,29 +86,29 @@ export function OrderRow({ order }: OrderRowProps) {
                     </dd>
                 </div>
                 <div>
-                    <dt>Chain</dt>
+                    <dt>链</dt>
                     <dd>
                         <span className="my-orders__chain">{order.chainId}</span>
                     </dd>
                 </div>
                 <div>
-                    <dt>Receipt</dt>
+                    <dt>回执</dt>
                     <dd>
                         {txUrl ? (
                             <ExternalLink href={txUrl}>
                                 {order.onchainTxHash?.slice(0, 10)}…
                             </ExternalLink>
                         ) : (
-                            <span className="muted">Awaiting confirmation</span>
+                            <span className="muted">等待确认</span>
                         )}
                     </dd>
                 </div>
                 <div>
-                    <dt>Enrollment</dt>
+                    <dt>报名</dt>
                     <dd>
                         {order.enrollmentId ? (
                             <Link to={`/learn/${order.courseId}`} className="my-orders__link">
-                                Open course
+                                进入课程
                                 <svg
                                     aria-hidden="true"
                                     viewBox="0 0 24 24"
@@ -123,7 +123,7 @@ export function OrderRow({ order }: OrderRowProps) {
                                 </svg>
                             </Link>
                         ) : (
-                            <span className="muted">Awaiting confirmation</span>
+                            <span className="muted">等待确认</span>
                         )}
                     </dd>
                 </div>
@@ -131,8 +131,7 @@ export function OrderRow({ order }: OrderRowProps) {
             {wrongNetwork ? (
                 <div className="notice notice--warn" role="status">
                     <span>
-                        This order is on chain <strong>{order.chainId}</strong>, but your wallet is on{" "}
-                        <strong>{chainId}</strong>.
+                        该订单位于 <strong>{order.chainId}</strong>，但当前钱包在 <strong>{chainId}</strong>。
                     </span>{" "}
                     <button
                         type="button"
@@ -140,7 +139,7 @@ export function OrderRow({ order }: OrderRowProps) {
                         disabled={isSwitching}
                         onClick={() => switchChain({ chainId: order.chainId })}
                     >
-                        {isSwitching ? "Switching…" : "Switch network"}
+                        {isSwitching ? "切换中…" : "切换网络"}
                     </button>
                 </div>
             ) : null}

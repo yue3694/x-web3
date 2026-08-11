@@ -24,12 +24,12 @@ export function SwapSummary({quote, quoting, outMeta, settlement}: SwapSummaryPr
         {quote ? (
           <>
             <span className="swap-card__min">
-              Min received {formatTokenAmount(quote.minAmountOut, outMeta.decimals)} {outMeta.symbol}
+              最少收到 {formatTokenAmount(quote.minAmountOut, outMeta.decimals)} {outMeta.symbol}
             </span>
             <span className="swap-card__route">
-              Route {quote.route.hops.join(" → ")} · {quote.route.feeTier / 10_000}%
+              路径 {quote.route.hops.join(" → ")} · {quote.route.feeTier / 10_000}%
             </span>
-            <span className="swap-card__gas">Gas est. {quote.gasEstimateWei.toString()}</span>
+            <span className="swap-card__gas">预计 Gas {quote.gasEstimateWei.toString()}</span>
           </>
         ) : null}
       </div>
@@ -37,13 +37,13 @@ export function SwapSummary({quote, quoting, outMeta, settlement}: SwapSummaryPr
       {settlement ? (
         <dl className="swap-card__settlement">
           <div>
-            <dt>Min received</dt>
+            <dt>最少收到</dt>
             <dd>
               {formatTokenAmount(settlement.minReceived, outMeta.decimals)} {outMeta.symbol}
             </dd>
           </div>
           <div>
-            <dt>Actual received</dt>
+            <dt>实际收到</dt>
             <dd>
               {settlement.actualReceived === null
                 ? "—"

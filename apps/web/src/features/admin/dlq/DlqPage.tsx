@@ -6,8 +6,15 @@ import type {DlqEntry, DlqRetryRequest} from "@/features/admin/adminTypes";
 
 function formatDate(value: string) {
     const date = new Date(value);
-    return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat("en-US", {dateStyle: "medium", timeStyle: "short"}).format(date);
+    return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat("zh-CN", {dateStyle: "medium", timeStyle: "short"}).format(date);
 }
+
+const SEVERITY_LABEL: Record<string, string> = {
+    info: "提示",
+    warn: "警告",
+    error: "错误",
+    critical: "严重",
+};
 
 export function DlqPage() {
     const [items, setItems] = useState<DlqEntry[]>([]);
@@ -18,7 +25,7 @@ export function DlqPage() {
         setLoading(true);
         setError("");
         try { setItems((await adminApi.listDlq()).items); }
-        catch (cause) { setError(cause instanceof ApiClientError ? `${cause.code}: ${cause.message}` : "Unable to load the dead-letter queue."); }
+        catch (cause) { setError(cause instanceof ApiClientError ? `${cause.code}: ${cause.message}` : "无法加载死信队列。"); }
         finally { setLoading(false); }
     }, []);
     useEffect(() => {void load();}, [load]);
@@ -26,14 +33,14 @@ export function DlqPage() {
         setBusy(item.id);
         setError("");
         try { await adminApi.retryDlq(item.id, {resolution}); setItems((current) => current.filter((entry) => entry.id !== item.id)); }
-        catch (cause) { setError(cause instanceof ApiClientError ? `${cause.code}: ${cause.message}` : "Unable to resolve this event."); }
+        catch (cause) { setError(cause instanceof ApiClientError ? `${cause.code}: ${cause.message}` : "无法处理该事件。"); }
         finally { setBusy(null); }
     };
     return (
         <section className="panel admin-panel" aria-labelledby="dlq-title">
-            <div className="section-heading"><div><span className="eyebrow">Admin · Recovery</span><h2 id="dlq-title">Dead-letter queue</h2><p>Inspect events that exhausted retries, then record an explicit resolution.</p></div><button type="button" className="btn--ghost" disabled={loading} onClick={() => void load()}>{loading ? "Refreshing…" : "Refresh"}</button></div>
+            <div className="section-heading"><div><span className="eyebrow">管理 · 恢复</span><h2 id="dlq-title">死信队列</h2><p>查看重试耗尽的事件，并记录明确的处理方式。</p></div><button type="button" className="btn--ghost" disabled={loading} onClick={() => void load()}>{loading ? "刷新中…" : "刷新"}</button></div>
             {error ? <div className="notice notice--error" role="alert">{error}</div> : null}
-            {loading ? <div className="route-loader" role="status">Loading unresolved events…</div> : items.length === 0 ? <div className="empty-state"><span>◇</span><h3>Queue is clear</h3><p>No unresolved events require operator attention.</p></div> : <ol className="dlq-list">{items.map((item) => <li key={item.id} className="dlq-card"><header><div><span className={`severity severity--${item.severity}`}>{item.severity}</span><strong>{item.kind}</strong></div><time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time></header><p>{item.summary}</p><dl><div><dt>Consumer</dt><dd>{item.consumer}</dd></div><div><dt>Chain</dt><dd>{item.chainId ?? "—"}</dd></div><div><dt>Retries</dt><dd>{item.retryCount}</dd></div></dl><details><summary>Inspect payload</summary><pre>{JSON.stringify(item.payload, null, 2)}</pre></details><footer><button type="button" className="btn--primary" disabled={busy === item.id} onClick={() => void resolve(item, "replayed")}>Replay</button><button type="button" className="btn--ghost" disabled={busy === item.id} onClick={() => void resolve(item, "manual")}>Resolved manually</button><button type="button" className="btn--danger-ghost" disabled={busy === item.id} onClick={() => void resolve(item, "ignored")}>Ignore</button></footer></li>)}</ol>}
+            {loading ? <div className="route-loader" role="status">正在加载未处理事件…</div> : items.length === 0 ? <div className="empty-state"><span>◇</span><h3>队列已清空</h3><p>暂无需要人工处理的未解决事件。</p></div> : <ol className="dlq-list">{items.map((item) => <li key={item.id} className="dlq-card"><header><div><span className={`severity severity--${item.severity}`}>{SEVERITY_LABEL[item.severity] ?? item.severity}</span><strong>{item.kind}</strong></div><time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time></header><p>{item.summary}</p><dl><div><dt>消费者</dt><dd>{item.consumer}</dd></div><div><dt>链</dt><dd>{item.chainId ?? "—"}</dd></div><div><dt>已重试</dt><dd>{item.retryCount}</dd></div></dl><details><summary>查看负载</summary><pre>{JSON.stringify(item.payload, null, 2)}</pre></details><footer><button type="button" className="btn--primary" disabled={busy === item.id} onClick={() => void resolve(item, "replayed")}>重放</button><button type="button" className="btn--ghost" disabled={busy === item.id} onClick={() => void resolve(item, "manual")}>已手动处理</button><button type="button" className="btn--danger-ghost" disabled={busy === item.id} onClick={() => void resolve(item, "ignored")}>忽略</button></footer></li>)}</ol>}
         </section>
     );
 }

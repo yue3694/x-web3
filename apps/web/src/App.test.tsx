@@ -104,15 +104,15 @@ describe("App shell", () => {
         mocks.profile = null;
         renderWithProviders();
         expect(screen.getAllByText(/WEB3 UNIVERSITY/i).length).toBeGreaterThanOrEqual(1);
-        expect(screen.getByText(/From discovery to proof/i)).toBeTruthy();
-        expect(screen.getByText(/Explore courses/i)).toBeTruthy();
+        expect(screen.getByText(/从发现到存证/i)).toBeTruthy();
+        expect(screen.getByText(/探索课程/i)).toBeTruthy();
         expect(screen.getByText(/chain_id: 31337/i)).toBeTruthy();
     });
 
     it("TopNav exposes independent routed workspaces", () => {
         mocks.profile = null;
         renderWithProviders();
-        const links = screen.getAllByRole("link", {name: /Courses|Swap|My learning/i});
+        const links = screen.getAllByRole("link", {name: /课程|兑换|我的学习/});
         const hrefs = links.map((a) => a.getAttribute("href"));
         expect(hrefs.some((h) => h === "/courses")).toBe(true);
         expect(hrefs.some((h) => h === "/swap")).toBe(true);
@@ -124,9 +124,9 @@ describe("App shell", () => {
             id: "u1", displayName: "Alice", roles: ["student"], permissions: [],
         };
         renderWithProviders("/account/enrollments");
-        expect(await screen.findByText(/Your learning, clearly organized/i)).toBeTruthy();
-        expect(screen.getAllByText(/My enrollments/i).length).toBeGreaterThanOrEqual(1);
-        expect(screen.queryByText(/My orders/i)).toBeNull();
+        expect(await screen.findByText(/学习进度，井然有序/i)).toBeTruthy();
+        expect(screen.getAllByText(/我的报名/i).length).toBeGreaterThanOrEqual(1);
+        expect(screen.queryByText(/我的订单/i)).toBeNull();
     });
 
     it("Teacher Studio mounts when COURSE_CREATE permission is present", () => {
@@ -134,7 +134,7 @@ describe("App shell", () => {
             id: "u2", displayName: "Prof", roles: ["teacher"], permissions: ["COURSE_CREATE"],
         };
         renderWithProviders("/studio");
-        return screen.findByText(/Course studio/i).then((node) => expect(node).toBeTruthy());
+        return screen.findByText(/课程工作台/i).then((node) => expect(node).toBeTruthy());
     });
 
     it("Admin console mounts when SYSTEM_ADMIN permission is present", () => {
@@ -144,7 +144,7 @@ describe("App shell", () => {
             permissions: ["SYSTEM_ADMIN", "admin"],
         };
         renderWithProviders("/admin/users");
-        return screen.findByText(/Users & roles/i).then((node) => expect(node).toBeTruthy());
+        return screen.findByText(/用户与角色/i).then((node) => expect(node).toBeTruthy());
     });
 
     it("Admin console is hidden for non-admin users", () => {
@@ -152,6 +152,6 @@ describe("App shell", () => {
             id: "u4", displayName: "Student", roles: ["student"], permissions: [],
         };
         renderWithProviders("/admin/users");
-        expect(screen.getByText(/Access denied/i)).toBeTruthy();
+        expect(screen.getByText(/无权访问/)).toBeTruthy();
     });
 });

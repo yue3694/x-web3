@@ -19,10 +19,10 @@ export default function PrivySignInButton({children}: {children?: ReactNode}) {
 		setBusy(true);
 		try {
 			const token = await getAccessToken();
-			if (!token) throw new Error("Privy access token unavailable");
+			if (!token) throw new Error("Privy 访问令牌不可用");
 			await createPlatformSession(token);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "login failed");
+			setError(e instanceof Error ? e.message : "登录失败");
 		} finally {
 			setBusy(false);
 		}
@@ -30,7 +30,7 @@ export default function PrivySignInButton({children}: {children?: ReactNode}) {
 
 	return (
 		<button type="button" onClick={handle} disabled={!ready || busy}>
-			{children ?? (busy ? "Signing in…" : authenticated ? "Continue" : "Sign in")}
+			{children ?? (busy ? "登录中…" : authenticated ? "继续" : "登录")}
 			{error ? <span role="alert"> — {error}</span> : null}
 		</button>
 	);

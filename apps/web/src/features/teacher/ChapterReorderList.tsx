@@ -97,7 +97,7 @@ export function ChapterReorderList<T>({items, onReorder, renderItem}: ChapterReo
     }, [moveByOffset]);
 
     return (
-        <ol className="chapter-reorder" aria-label="Reorder chapters">
+        <ol className="chapter-reorder" aria-label="调整章节顺序">
             {items.map((chapter) => {
                 const isDragging = draggingId === chapter.id;
                 const isOver = overId === chapter.id && draggingId !== null && draggingId !== chapter.id;

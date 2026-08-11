@@ -59,19 +59,19 @@ export function CheckoutPanel({
         <section className="checkout-panel panel" aria-labelledby="checkout-panel-title">
             <header className="section-heading">
                 <div>
-                    <span className="eyebrow">Checkout</span>
-                    <h2 id="checkout-panel-title">Buy {courseTitle}</h2>
-                    <p>Settle with YD on the configured test chain. Enrollment unlocks after Worker confirmation.</p>
+                    <span className="eyebrow">结算</span>
+                    <h2 id="checkout-panel-title">购买 {courseTitle}</h2>
+                    <p>在已配置的测试链上以 YD 完成支付；Worker 确认后即可解锁学习。</p>
                 </div>
             </header>
 
             <dl className="checkout-panel__breakdown">
                 <div>
-                    <dt>Course price</dt>
+                    <dt>课程价格</dt>
                     <dd>{breakdown.base} YD</dd>
                 </div>
                 <div className="checkout-panel__total">
-                    <dt>Total</dt>
+                    <dt>合计</dt>
                     <dd>{breakdown.total} YD</dd>
                 </div>
             </dl>
@@ -85,8 +85,7 @@ export function CheckoutPanel({
                     onChange={(e) => setAccepted(e.target.checked)}
                 />
                 <span>
-                    I understand that on-chain purchases are final and non-refundable. The course unlock
-                    is tied to my connected wallet.
+                    我已知晓链上购买不可撤销且不予退款，课程解锁与当前连接的钱包绑定。
                 </span>
             </label>
 
@@ -113,7 +112,7 @@ export function CheckoutPanel({
                 />
                 {!accepted ? (
                     <p className="muted" role="note">
-                        Accept the terms to enable purchase.
+                        请先勾选条款后再启用购买按钮。
                     </p>
                 ) : null}
             </div>

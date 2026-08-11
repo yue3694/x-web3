@@ -34,28 +34,28 @@ interface MyEnrollmentsProps {
 type Filter = "all" | "in-progress" | "completed";
 
 const FILTER_OPTIONS: { value: Filter; label: string }[] = [
-    { value: "all", label: "All" },
-    { value: "in-progress", label: "In progress" },
-    { value: "completed", label: "Completed" },
+    { value: "all", label: "全部" },
+    { value: "in-progress", label: "学习中" },
+    { value: "completed", label: "已完成" },
 ];
 
 function formatDate(iso: string): string {
     const date = new Date(iso);
     if (Number.isNaN(date.valueOf())) return iso;
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("zh-CN", {
         year: "numeric",
-        month: "short",
-        day: "numeric",
+        month: "2-digit",
+        day: "2-digit",
     }).format(date);
 }
 
 /** 进度状态文案 —— 不止 0/100 两个端点，给中间态更细的反馈。 */
 function progressLabel(pct: number, hasCompletion: boolean): string {
-    if (hasCompletion) return "Completed";
-    if (pct === 0) return "Not started";
-    if (pct < 50) return "Just started";
-    if (pct < 100) return "In progress";
-    return "Finishing up";
+    if (hasCompletion) return "已完成";
+    if (pct === 0) return "尚未开始";
+    if (pct < 50) return "刚刚开始";
+    if (pct < 100) return "学习中";
+    return "即将完成";
 }
 
 function StatusBadge({ item }: { item: EnrollmentItem }) {
@@ -90,10 +90,10 @@ function EmptyState({ filter }: EmptyStateProps) {
                     <path d="M12 2 4 6v6c0 4.5 3.2 8.6 8 10 4.8-1.4 8-5.5 8-10V6l-8-4Z" />
                     <path d="m9 12 2 2 4-4" />
                 </svg>
-                <h3>No completed courses yet</h3>
-                <p>Wrap up an in-progress course to unlock your on-chain certificate.</p>
+                <h3>暂无已结课的课程</h3>
+                <p>完成一门正在学习的课程，即可解锁你的链上证书。</p>
                 <Link to="/account/enrollments?filter=in-progress" className="btn--ghost">
-                    Show in-progress
+                    查看学习中
                 </Link>
             </div>
         );
@@ -114,10 +114,10 @@ function EmptyState({ filter }: EmptyStateProps) {
                     <circle cx="12" cy="12" r="9" />
                     <path d="M12 7v5l3 2" />
                 </svg>
-                <h3>All caught up</h3>
-                <p>Every active enrollment has been completed. Browse the catalog for your next course.</p>
+                <h3>全部学完啦</h3>
+                <p>当前在读的课程都已完成。看看课程市场，挑下一门感兴趣的课。</p>
                 <Link to="/courses" className="btn--primary">
-                    Browse catalog
+                    浏览课程
                 </Link>
             </div>
         );
@@ -138,10 +138,10 @@ function EmptyState({ filter }: EmptyStateProps) {
                 <path d="M4 5v10a4 4 0 0 0 4 4" />
                 <path d="M9 9h6M9 13h4" />
             </svg>
-            <h3>No enrollments yet</h3>
-            <p>Browse the catalog and purchase a course to start learning.</p>
+            <h3>暂无报名记录</h3>
+            <p>浏览课程目录并购买一门课程，开启你的学习之旅。</p>
             <Link to="/courses" className="btn--primary">
-                Browse catalog
+                浏览课程
             </Link>
         </div>
     );
@@ -213,9 +213,9 @@ export function MyEnrollments({ className }: MyEnrollmentsProps) {
             <section className={`my-enrollments panel${className ? ` ${className}` : ""}`}>
                 <div className="section-heading">
                     <div>
-                        <span className="eyebrow">Account</span>
-                        <h2>My enrollments</h2>
-                        <p>Sign in to track your course progress.</p>
+                        <span className="eyebrow">账户</span>
+                        <h2>我的报名</h2>
+                        <p>请先登录，跟踪你的课程进度。</p>
                     </div>
                 </div>
             </section>
@@ -232,25 +232,25 @@ export function MyEnrollments({ className }: MyEnrollmentsProps) {
         >
             <header className="section-heading">
                 <div>
-                    <span className="eyebrow">Account</span>
-                    <h2 id="my-enrollments-title">My enrollments</h2>
-                    <p>Courses you have purchased, with watch progress and completion status.</p>
+                    <span className="eyebrow">账户</span>
+                    <h2 id="my-enrollments-title">我的报名</h2>
+                    <p>你已购买的课程，含观看进度与完课状态。</p>
                 </div>
                 {hasItems ? (
                     <dl
                         className="my-enrollments__stats"
-                        aria-label="Enrollment summary"
+                        aria-label="报名汇总"
                     >
                         <div className="my-enrollments__stat my-enrollments__stat--progress">
-                            <dt>In progress</dt>
+                            <dt>学习中</dt>
                             <dd>{counts["in-progress"]}</dd>
                         </div>
                         <div className="my-enrollments__stat my-enrollments__stat--done">
-                            <dt>Completed</dt>
+                            <dt>已完成</dt>
                             <dd>{counts.completed}</dd>
                         </div>
                         <div className="my-enrollments__stat">
-                            <dt>Total</dt>
+                            <dt>合计</dt>
                             <dd>{counts.all}</dd>
                         </div>
                     </dl>
@@ -259,15 +259,15 @@ export function MyEnrollments({ className }: MyEnrollmentsProps) {
 
             {routeMissing ? (
                 <div className="notice notice--error" role="alert">
-                    The <code>GET /me/enrollments</code> endpoint is not wired in the current API build.
-                    Please ask the backend track to expose the route.
+                    当前 API 尚未挂载 <code>GET /me/enrollments</code> 路由，
+                    请联系后端同学开放该接口。
                 </div>
             ) : null}
             {error && !routeMissing ? (
                 <div className="notice notice--error" role="alert">
                     <span>{error}</span>{" "}
                     <button type="button" className="btn--ghost" onClick={() => void load()}>
-                        Retry
+                        重试
                     </button>
                 </div>
             ) : null}
@@ -276,7 +276,7 @@ export function MyEnrollments({ className }: MyEnrollmentsProps) {
                 <div
                     className="filter-chips"
                     role="tablist"
-                    aria-label="Filter enrollments by status"
+                    aria-label="按状态筛选报名"
                 >
                     {FILTER_OPTIONS.map((opt) => {
                         const isActive = filter === opt.value;
@@ -307,7 +307,7 @@ export function MyEnrollments({ className }: MyEnrollmentsProps) {
                     id="my-enrollments-list"
                     className="my-enrollments__list"
                     aria-busy="true"
-                    aria-label="Loading enrollments"
+                    aria-label="报名加载中"
                 >
                     {[0, 1, 2].map((i) => (
                         <li key={i} className="my-enrollments__skeleton">
@@ -322,7 +322,7 @@ export function MyEnrollments({ className }: MyEnrollmentsProps) {
                 <ol
                     id="my-enrollments-list"
                     className="my-enrollments__list"
-                    aria-label="My enrollments"
+                    aria-label="我的报名"
                 >
                     {filtered.map((e) => {
                         const variant = e.hasCompletion ? "completed" : "in-progress";
@@ -343,9 +343,9 @@ export function MyEnrollments({ className }: MyEnrollmentsProps) {
                                     <time
                                         className="my-enrollments__time"
                                         dateTime={e.enrolledAt}
-                                        title={`Enrolled on ${formatDate(e.enrolledAt)}`}
+                                        title={`报名于 ${formatDate(e.enrolledAt)}`}
                                     >
-                                        enrolled {formatDate(e.enrolledAt)}
+                                        报名于 {formatDate(e.enrolledAt)}
                                     </time>
                                 </header>
 
@@ -355,7 +355,7 @@ export function MyEnrollments({ className }: MyEnrollmentsProps) {
                                     aria-valuemin={0}
                                     aria-valuemax={100}
                                     aria-valuenow={e.completionPct}
-                                    aria-label={`Progress: ${e.completionPct}% complete`}
+                                    aria-label={`进度：${e.completionPct}%`}
                                 >
                                     <div className="my-enrollments__progress-track">
                                         <div
@@ -388,11 +388,11 @@ export function MyEnrollments({ className }: MyEnrollmentsProps) {
                                             >
                                                 <path d="M20 6 9 17l-5-5" />
                                             </svg>
-                                            Completed {formatDate(e.completedAt)}
+                                            已完成 {formatDate(e.completedAt)}
                                         </span>
                                     ) : (
                                         <span className="my-enrollments__hint">
-                                            {progressLabel(e.completionPct, e.hasCompletion)} · keep going
+                                            {progressLabel(e.completionPct, e.hasCompletion)} · 继续加油
                                         </span>
                                     )}
                                     <Link
@@ -400,11 +400,11 @@ export function MyEnrollments({ className }: MyEnrollmentsProps) {
                                         className="my-enrollments__cta"
                                         aria-label={
                                             e.hasCompletion
-                                                ? `Review ${e.courseTitle}`
-                                                : `Continue ${e.courseTitle}`
+                                                ? `回顾课程《${e.courseTitle}》`
+                                                : `继续学习《${e.courseTitle}》`
                                         }
                                     >
-                                        {e.hasCompletion ? "Review course" : "Continue learning"}
+                                        {e.hasCompletion ? "回顾课程" : "继续学习"}
                                         <svg
                                             aria-hidden="true"
                                             viewBox="0 0 24 24"

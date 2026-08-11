@@ -46,7 +46,7 @@ export function SlippageControl({valueBps, onChange, disabled = false}: Slippage
 
   return (
     <fieldset className="slippage-control" disabled={disabled}>
-      <legend className="slippage-control__legend">Slippage tolerance</legend>
+      <legend className="slippage-control__legend">滑点容忍度</legend>
 
       <div className="slippage-control__row">
         {SLIPPAGE_PRESETS_BPS.map((bps) => (
@@ -67,11 +67,11 @@ export function SlippageControl({valueBps, onChange, disabled = false}: Slippage
         ))}
 
         <label className="slippage-control__custom">
-          <span className="sr-only">Custom slippage in percent</span>
+          <span className="sr-only">自定义滑点百分比</span>
           <input
             type="text"
             inputMode="decimal"
-            placeholder="Custom"
+            placeholder="自定义"
             value={customText}
             onChange={(e) => onCustomChange(e.target.value)}
             aria-invalid={invalid || tone === "blocked"}
@@ -87,12 +87,12 @@ export function SlippageControl({valueBps, onChange, disabled = false}: Slippage
         role={tone === "ok" ? undefined : "alert"}
       >
         {invalid
-          ? "Enter a valid percentage, e.g. 0.5"
+          ? "请输入有效百分比，例如 0.5"
           : tone === "blocked"
-            ? `Slippage above ${MAX_PCT}% is rejected. Lower it to continue.`
+            ? `滑点超过 ${MAX_PCT}% 已被拒绝，请调低后再继续。`
             : tone === "warn"
-              ? `Above ${WARN_PCT}% you may be front-run. Proceed only if you know why.`
-              : `Your swap reverts if the price moves more than ${bpsToPercentText(valueBps)}%.`}
+              ? `滑点超过 ${WARN_PCT}% 容易被抢跑，请确认风险后再继续。`
+              : `当价格波动超过 ${bpsToPercentText(valueBps)}% 时，兑换将自动回滚。`}
       </p>
     </fieldset>
   );

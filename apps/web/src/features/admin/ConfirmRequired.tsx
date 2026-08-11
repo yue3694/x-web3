@@ -186,7 +186,7 @@ export function ConfirmRequired({
             setError(
                 e instanceof ApiClientError
                     ? `${e.code}: ${e.message}`
-                    : "Action failed.",
+                    : "操作失败。",
             );
         } finally {
             setBusy(false);
@@ -239,14 +239,11 @@ export function ConfirmRequired({
                         <div style={hintStyle}>
                             {armed ? (
                                 <span>
-                                    Click <strong>"{confirmLabel}"</strong> again within{" "}
-                                    <code>{remainingSec}s</code> to confirm.
+                                    请在 <code>{remainingSec}s</code> 内再次点击 <strong>"{confirmLabel}"</strong> 以确认操作。
                                 </span>
                             ) : (
                                 <span>
-                                    This is a destructive admin action. You will be asked
-                                    to click confirm twice within{" "}
-                                    {Math.round(windowMs / 1000)}s.
+                                    这是一项高风险的管理操作，需要在 {Math.round(windowMs / 1000)} 秒内点击两次确认按钮才会执行。
                                 </span>
                             )}
                         </div>
@@ -258,7 +255,7 @@ export function ConfirmRequired({
                                 onClick={close}
                                 disabled={busy}
                             >
-                                Cancel
+                                取消
                             </button>
                             <button
                                 type="button"
@@ -267,10 +264,10 @@ export function ConfirmRequired({
                                 disabled={busy}
                             >
                                 {busy
-                                    ? "Working…"
+                                    ? "执行中…"
                                     : armed
-                                      ? `${confirmLabel} (${remainingSec}s)`
-                                      : `I confirm — ${confirmLabel}`}
+                                      ? `${confirmLabel}（剩余 ${remainingSec}s）`
+                                      : `我已确认 — ${confirmLabel}`}
                             </button>
                         </footer>
                     </div>

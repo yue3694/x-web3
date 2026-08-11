@@ -41,10 +41,10 @@ function AppShell() {
     return (
         <>
             <ScrollRestoration />
-            <a className="skip-link" href="#main-content">Skip to main content</a>
+            <a className="skip-link" href="#main-content">跳到主内容</a>
             <TopNav />
             <main id="main-content" className="container app-main" tabIndex={-1}>
-                <Suspense fallback={<div className="route-loader" role="status">Loading page…</div>}>
+                <Suspense fallback={<div className="route-loader" role="status">页面加载中…</div>}>
                     <Outlet />
                 </Suspense>
             </main>

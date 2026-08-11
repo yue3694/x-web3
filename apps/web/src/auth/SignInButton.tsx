@@ -27,7 +27,7 @@ interface SignInButtonProps {
 export function SignInButton({children, className}: SignInButtonProps) {
 	if (!usesPrivyDevStub) {
 		return (
-			<Suspense fallback={<button disabled>Loading sign in…</button>}>
+			<Suspense fallback={<button disabled>登录加载中…</button>}>
 				<PrivySignInButton>{children}</PrivySignInButton>
 			</Suspense>
 		);
@@ -51,7 +51,7 @@ function DevSignInButton({children, className}: SignInButtonProps) {
             //   const privyAccessToken = await getAccessToken();
 			await login("stub");
         } catch (e) {
-            setError(e instanceof Error ? e.message : "login failed");
+            setError(e instanceof Error ? e.message : "登录失败");
         } finally {
             setBusy(false);
         }
@@ -64,7 +64,7 @@ function DevSignInButton({children, className}: SignInButtonProps) {
             onClick={handle}
             disabled={busy}
         >
-            {children ?? (busy ? "Signing in…" : "Sign in")}
+            {children ?? (busy ? "登录中…" : "登录")}
             {error ? <span role="alert"> — {error}</span> : null}
         </button>
     );

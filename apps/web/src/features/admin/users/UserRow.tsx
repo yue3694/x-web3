@@ -55,7 +55,9 @@ const smallBtnStyle: CSSProperties = {
 };
 
 function roleLabel(code: AdminRoleCode): string {
-    if (code === "super_admin") return "super admin";
+    if (code === "super_admin") return "超级管理员";
+    if (code === "teacher") return "讲师";
+    if (code === "student") return "学生";
     return code;
 }
 
@@ -82,12 +84,12 @@ export function UserRow({user, availableRoles, onChanged}: UserRowProps) {
                 <span style={{color: "var(--fg)", fontWeight: 500}}>
                     {user.walletsCount}
                 </span>{" "}
-                wallet{user.walletsCount === 1 ? "" : "s"}
+                个钱包
             </div>
 
-            <div style={rolesStyle} aria-label="Roles">
+            <div style={rolesStyle} aria-label="角色">
                 {user.roles.length === 0 ? (
-                    <span style={cellMuted}>no role</span>
+                    <span style={cellMuted}>无角色</span>
                 ) : (
                     user.roles.map((r) => (
                         <span key={r} className={rolePillTone(r)}>
@@ -101,9 +103,9 @@ export function UserRow({user, availableRoles, onChanged}: UserRowProps) {
                 {grantable.map((r) => (
                     <ConfirmRequired
                         key={`grant-${r}`}
-                        title={`Grant role: ${roleLabel(r)}`}
-                        description={`Granting "${r}" to ${user.email} will be written to audit log. Make sure this is intentional.`}
-                        confirmLabel="Grant"
+                        title={`授予角色：${roleLabel(r)}`}
+                        description={`授予 "${r}" 给 ${user.email} 将写入审计日志，请确认这是有意操作。`}
+                        confirmLabel="授予"
                         onConfirm={async () => {
                             await adminApi.grantRole(user.id, {role: r});
                             onChanged();
@@ -118,9 +120,9 @@ export function UserRow({user, availableRoles, onChanged}: UserRowProps) {
                 {revokable.map((r) => (
                     <ConfirmRequired
                         key={`revoke-${r}`}
-                        title={`Revoke role: ${roleLabel(r)}`}
-                        description={`Revoking "${r}" from ${user.email} will be written to audit log.`}
-                        confirmLabel="Revoke"
+                        title={`收回角色：${roleLabel(r)}`}
+                        description={`从 ${user.email} 收回 "${r}" 将写入审计日志。`}
+                        confirmLabel="收回"
                         onConfirm={async () => {
                             await adminApi.revokeRole(user.id, r);
                             onChanged();

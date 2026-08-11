@@ -34,9 +34,9 @@ import {createDraftChapter, createDraftLesson, isCurriculumValid, toCurriculumIn
 
 function seedChapters(): DraftChapter[] {
     return [
-        {...createDraftChapter(), title: "Welcome & orientation"},
-        {...createDraftChapter(), title: "Core concepts"},
-        {...createDraftChapter(), title: "Hands-on project"},
+        {...createDraftChapter(), title: "欢迎与导览"},
+        {...createDraftChapter(), title: "核心概念"},
+        {...createDraftChapter(), title: "动手项目"},
     ];
 }
 
@@ -65,7 +65,7 @@ export function CourseEditor() {
     const curriculumSaved = curriculumValid && savedCurriculum === JSON.stringify(chapters);
 
     const reorderItems: ChapterReorderItem<DraftChapter>[] = useMemo(
-        () => chapters.map((c) => ({id: c.clientId, title: c.title || "(untitled chapter)", payload: c})),
+        () => chapters.map((c) => ({id: c.clientId, title: c.title || "（未命名章节）", payload: c})),
         [chapters],
     );
 
@@ -125,15 +125,15 @@ export function CourseEditor() {
             if (course) {
                 const updated = await courseApi.update(course.id, course.currentVersion, input);
                 setCourse(updated);
-                setMessage("Course details saved.");
+                setMessage("课程详情已保存。");
             } else {
                 const slug = `${title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now().toString(36)}`;
                 const created = await courseApi.create({...input, slug});
                 setCourse(created);
-                setMessage("Draft created. Complete and save the curriculum before submitting it.");
+                setMessage("草稿已创建，请补全并保存课程大纲后再提交。");
             }
         } catch (cause) {
-            setError(cause instanceof ApiClientError ? cause.message : "Could not create the draft.");
+            setError(cause instanceof ApiClientError ? cause.message : "无法创建草稿。");
         } finally { setBusy(false); }
     }
 
@@ -144,9 +144,9 @@ export function CourseEditor() {
         try {
             const updated = await courseApi.submit(course.id);
             setCourse(updated);
-            setMessage("Course submitted for admin review.");
+            setMessage("课程已提交，等待管理员审核。");
         } catch (cause) {
-            setError(cause instanceof ApiClientError ? cause.message : "Could not submit the course.");
+            setError(cause instanceof ApiClientError ? cause.message : "无法提交课程。");
         } finally { setBusy(false); }
     }
 
@@ -154,7 +154,7 @@ export function CourseEditor() {
     async function saveCurriculum() {
         if (!course) return;
         if (!curriculumValid) {
-            setError("Every chapter and lesson needs a non-empty title.");
+            setError("每个章节和课时都需要填写标题。");
             return;
         }
         setSavingCurriculum(true); setMessage(""); setError(""); setStaleConflict(false);
@@ -163,13 +163,13 @@ export function CourseEditor() {
             const resp = await courseApi.replaceCurriculum(course.id, course.currentVersion, body);
             setCourse({...course, currentVersion: resp.currentVersion});
             setSavedCurriculum(JSON.stringify(chapters));
-            setMessage(`Curriculum saved (v${resp.currentVersion}).`);
+            setMessage(`课程大纲已保存（v${resp.currentVersion}）。`);
         } catch (cause) {
             if (cause instanceof ApiClientError && cause.code === "STALE_VERSION") {
                 setStaleConflict(true);
-                setError("This course was updated elsewhere. Reload the latest version or discard your changes.");
+                setError("课程已在别处更新。请重新载入最新版本或放弃你的修改。");
             } else {
-                setError(cause instanceof ApiClientError ? cause.message : "Could not save curriculum.");
+                setError(cause instanceof ApiClientError ? cause.message : "无法保存课程大纲。");
             }
         } finally { setSavingCurriculum(false); }
     }
@@ -193,16 +193,16 @@ export function CourseEditor() {
                     })),
                 })),
             );
-            setMessage(`Reloaded v${fresh.course.currentVersion} from server.`);
+            setMessage(`已从服务器重新载入 v${fresh.course.currentVersion}。`);
         } catch (cause) {
-            setError(cause instanceof ApiClientError ? cause.message : "Could not reload the course.");
+            setError(cause instanceof ApiClientError ? cause.message : "无法重新载入课程。");
         } finally { setBusy(false); }
     }
 
     function discardLocalEdits() {
         setStaleConflict(false);
         setError("");
-        setMessage("Local edits kept. Re-save will overwrite the latest server version.");
+        setMessage("已保留本地修改，再次保存将覆盖服务器上的最新版本。");
     }
 
     // --- 章节操作 ---
@@ -236,12 +236,12 @@ export function CourseEditor() {
     function attachLessonMedia(chapterClientId: string, lessonClientId: string, asset: MediaAsset) {
         updateLesson(chapterClientId, lessonClientId, {mediaAssetId: asset.id, mediaUrl: asset.s3Key});
         const tail = asset.s3Key.split("/").pop() || asset.s3Key;
-        setMessage(`Attached ${tail} to lesson.`);
+        setMessage(`已为课时附加 ${tail}。`);
     }
 
     function detachLessonMedia(chapterClientId: string, lessonClientId: string) {
         updateLesson(chapterClientId, lessonClientId, {mediaAssetId: undefined, mediaUrl: undefined});
-        setMessage("Removed attachment from lesson.");
+        setMessage("已移除课时的媒体附件。");
     }
 
     // 若用户在 idle 状态下已经有 dirty 草稿，按下 enter 不会误触发 create
@@ -253,9 +253,9 @@ export function CourseEditor() {
         <section className="teacher-studio panel" aria-labelledby="studio-title">
             <div className="section-heading">
                 <div>
-                    <span className="eyebrow">Teacher workspace</span>
-                    <h2 id="studio-title">Course studio</h2>
-                    <p>Build a versioned course draft and send it through onchain university review.</p>
+                    <span className="eyebrow">讲师工作区</span>
+                    <h2 id="studio-title">课程工作台</h2>
+                    <p>搭一个带版本号的课程草稿，并把它送进链上大学审核流程。</p>
                 </div>
                 {course ? <span className={`status-pill status-pill--${course.status}`}>{course.status.replace("_", " ")}</span> : null}
             </div>
@@ -263,7 +263,7 @@ export function CourseEditor() {
             {mine.length ? (
                 <div className="card editor-actions">
                     <label>
-                        <span>My courses</span>
+                        <span>我的课程</span>
                         <select value={course?.id ?? ""} onChange={(event) => {
                             const selected = mine.find((item) => item.course.id === event.target.value);
                             if (selected) restore(selected);
@@ -271,28 +271,28 @@ export function CourseEditor() {
                             {mine.map((item) => <option key={item.course.id} value={item.course.id}>{item.course.title} · {item.course.status.replace("_", " ")}</option>)}
                         </select>
                     </label>
-                    <button className="btn--ghost" type="button" onClick={startNew}>New draft</button>
+                    <button className="btn--ghost" type="button" onClick={startNew}>新建草稿</button>
                 </div>
             ) : null}
 
             <form className="editor-grid card" onSubmit={saveDetails}>
-                <label><span>Course title</span><input required disabled={Boolean(course && course.status !== "draft")} maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Smart Contract Security" /></label>
-                <label><span>Price (USD)</span><input required disabled={Boolean(course && course.status !== "draft")} min="0" step="0.01" type="number" value={price} onChange={(event) => setPrice(event.target.value)} /></label>
-                <label className="editor-grid__wide"><span>Description</span><textarea disabled={Boolean(course && course.status !== "draft")} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What will students be able to build?" rows={5} /></label>
+                <label><span>课程标题</span><input required disabled={Boolean(course && course.status !== "draft")} maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="智能合约安全" /></label>
+                <label><span>价格（USD）</span><input required disabled={Boolean(course && course.status !== "draft")} min="0" step="0.01" type="number" value={price} onChange={(event) => setPrice(event.target.value)} /></label>
+                <label className="editor-grid__wide"><span>课程简介</span><textarea disabled={Boolean(course && course.status !== "draft")} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="学员学完能做出什么？" rows={5} /></label>
                 <div className="editor-actions editor-grid__wide">
-                    <button className="btn--primary" disabled={busy || !valid || Boolean(course && course.status !== "draft")} type="submit">{busy ? "Saving..." : course ? "Save details" : "Create draft"}</button>
-                    {course?.status === "draft" ? <button className="btn--ghost" disabled={busy || savingCurriculum || !curriculumSaved} onClick={() => void submit()} type="button">Submit for publishing</button> : null}
-                    {course?.status === "draft" && !curriculumSaved ? <span className="muted">Save a valid curriculum to enable submission.</span> : null}
+                    <button className="btn--primary" disabled={busy || !valid || Boolean(course && course.status !== "draft")} type="submit">{busy ? "保存中..." : course ? "保存详情" : "创建草稿"}</button>
+                    {course?.status === "draft" ? <button className="btn--ghost" disabled={busy || savingCurriculum || !curriculumSaved} onClick={() => void submit()} type="button">提交发布</button> : null}
+                    {course?.status === "draft" && !curriculumSaved ? <span className="muted">保存一份有效的大纲后即可提交。</span> : null}
                     <span>{message}</span>
                 </div>
             </form>
 
-            <div className="editor-curriculum card" aria-label="Curriculum">
+            <div className="editor-curriculum card" aria-label="课程大纲">
                 <div className="section-heading">
                     <div>
-                        <span className="eyebrow">Curriculum</span>
-                        <h3>Chapters</h3>
-                        <p>Drag to reorder, add lessons, and upload media. Save before submitting for review.</p>
+                        <span className="eyebrow">课程大纲</span>
+                        <h3>章节</h3>
+                        <p>拖拽以重新排序、添加课时并附加媒体。提交审核前请先保存。</p>
                     </div>
                     {course ? <span className="muted">v{course.currentVersion}</span> : null}
                 </div>
@@ -303,9 +303,9 @@ export function CourseEditor() {
                     renderItem={() => null}
                 />
 
-                {chapters.length === 0 ? <div className="empty-state"><span>◇</span><h3>No chapters yet</h3><p>Click "Add chapter" to start.</p></div> : null}
+                {chapters.length === 0 ? <div className="empty-state"><span>◇</span><h3>暂无章节</h3><p>点击「添加章节」开始编排。</p></div> : null}
 
-                <ol className="editor-curriculum__chapters" aria-label="Chapter list">
+                <ol className="editor-curriculum__chapters" aria-label="章节列表">
                     {chapters.map((chapter, index) => (
                         <li key={chapter.clientId} className="editor-chapter">
                             <div className="editor-chapter__head">
@@ -313,11 +313,11 @@ export function CourseEditor() {
                                 <input
                                     className="editor-chapter__title"
                                     value={chapter.title}
-                                    placeholder={`Chapter ${index + 1} title`}
+                                    placeholder={`第 ${index + 1} 章标题`}
                                     onChange={(event) => updateChapterTitle(chapter.clientId, event.target.value)}
-                                    aria-label={`Chapter ${index + 1} title`}
+                                    aria-label={`第 ${index + 1} 章标题`}
                                 />
-                                <button className="btn--ghost btn--danger" type="button" onClick={() => removeChapter(chapter.clientId)} aria-label={`Remove chapter ${index + 1}`}>Remove</button>
+                                <button className="btn--ghost btn--danger" type="button" onClick={() => removeChapter(chapter.clientId)} aria-label={`删除第 ${index + 1} 章`}>删除</button>
                             </div>
                             <ol className="editor-chapter__lessons">
                                 {chapter.lessons.map((lesson) => (
@@ -325,9 +325,9 @@ export function CourseEditor() {
                                         <input
                                             className="editor-lesson__title"
                                             value={lesson.title}
-                                            placeholder="Lesson title"
+                                            placeholder="课时标题"
                                             onChange={(event) => updateLesson(chapter.clientId, lesson.clientId, {title: event.target.value})}
-                                            aria-label={`Lesson title in chapter ${index + 1}`}
+                                            aria-label={`第 ${index + 1} 章下的课时标题`}
                                         />
                                         <label className="editor-lesson__required">
                                             <input
@@ -335,10 +335,10 @@ export function CourseEditor() {
                                                 checked={lesson.required}
                                                 onChange={(event) => updateLesson(chapter.clientId, lesson.clientId, {required: event.target.checked})}
                                             />
-                                            <span>Required</span>
+                                            <span>必修</span>
                                         </label>
                                         <label className="editor-lesson__duration">
-                                            <span>Sec</span>
+                                            <span>秒</span>
                                             <input
                                                 type="number"
                                                 min="0"
@@ -346,21 +346,21 @@ export function CourseEditor() {
                                                 onChange={(event) => updateLesson(chapter.clientId, lesson.clientId, {durationSeconds: Math.max(0, Number(event.target.value) || 0)})}
                                             />
                                         </label>
-                                        <button className="btn--ghost btn--danger" type="button" onClick={() => removeLesson(chapter.clientId, lesson.clientId)} aria-label="Remove lesson">×</button>
+                                        <button className="btn--ghost btn--danger" type="button" onClick={() => removeLesson(chapter.clientId, lesson.clientId)} aria-label="删除课时">×</button>
                                     </li>
                                 ))}
                             </ol>
                             <div className="editor-lesson__add">
-                                <button className="btn--ghost" type="button" onClick={() => addLesson(chapter.clientId)}>+ Add lesson</button>
+                                <button className="btn--ghost" type="button" onClick={() => addLesson(chapter.clientId)}>+ 添加课时</button>
                             </div>
                             {/* media upload per lesson */}
                             <div className="editor-lesson__media">
-                                <h4>Media</h4>
+                                <h4>媒体</h4>
                                 {chapter.lessons.map((lesson) => (
                                     <div key={lessonKey(chapter, lesson)} className="editor-lesson__media-row">
-                                        <span className="editor-lesson__media-label">{lesson.title || "(untitled lesson)"}</span>
+                                        <span className="editor-lesson__media-label">{lesson.title || "（未命名课时）"}</span>
                                         <MediaUrlAttacher
-                                            label="Attach video"
+                                            label="附加视频"
                                             initialUrl={lesson.mediaUrl ?? ""}
                                             onAttached={(asset) => attachLessonMedia(chapter.clientId, lesson.clientId, asset)}
                                             onClear={() => detachLessonMedia(chapter.clientId, lesson.clientId)}
@@ -373,23 +373,23 @@ export function CourseEditor() {
                 </ol>
 
                 <div className="editor-actions">
-                    <button className="btn--ghost" type="button" onClick={addChapter}>+ Add chapter</button>
+                    <button className="btn--ghost" type="button" onClick={addChapter}>+ 添加章节</button>
                     {course ? (
                         <button className="btn--primary" type="button" disabled={savingCurriculum || !curriculumValid || course.status !== "draft"} onClick={() => void saveCurriculum()}>
-                            {savingCurriculum ? "Saving curriculum..." : "Save curriculum"}
+                            {savingCurriculum ? "大纲保存中..." : "保存大纲"}
                         </button>
                     ) : (
-                        <span className="muted">Create a draft first to save curriculum.</span>
+                        <span className="muted">请先创建草稿课程，再保存大纲。</span>
                     )}
                 </div>
 
                 {error ? <div className="notice notice--error" role="alert">{error}</div> : null}
                 {staleConflict ? (
                     <div className="notice notice--warn" role="alert">
-                        <strong>Save conflict.</strong> Another tab updated this course. Reload latest to drop your edits, or keep editing and force-save.
+                        <strong>保存冲突。</strong> 课程已在其它标签页更新。你可以重新载入最新版以放弃本次编辑，或继续编辑后强制保存。
                         <div className="editor-actions">
-                            <button className="btn--ghost" type="button" onClick={() => void reloadLatest()}>Reload latest</button>
-                            <button className="btn--ghost" type="button" onClick={discardLocalEdits}>Keep my edits</button>
+                            <button className="btn--ghost" type="button" onClick={() => void reloadLatest()}>重新载入最新版</button>
+                            <button className="btn--ghost" type="button" onClick={discardLocalEdits}>保留我的修改</button>
                         </div>
                     </div>
                 ) : null}

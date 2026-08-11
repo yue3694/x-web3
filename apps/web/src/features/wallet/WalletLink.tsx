@@ -59,14 +59,14 @@ export function WalletLink({domain, onLinked}: WalletLinkProps) {
     if (!isConnected || !address) {
         return (
             <div className="wallet-link">
-                <p>Connect a wallet first.</p>
+                <p>请先连接钱包。</p>
             </div>
         );
     }
 
     const handleLink = async () => {
         if (!chainId) {
-            setError("wallet chainId unknown");
+            setError("钱包 chainId 未知");
             return;
         }
         setBusy(true);
@@ -102,7 +102,7 @@ export function WalletLink({domain, onLinked}: WalletLinkProps) {
                     ? `${e.code}: ${e.message}`
                     : e instanceof Error
                       ? e.message
-                      : "link failed";
+                      : "绑定失败";
             setError(msg);
         } finally {
             setBusy(false);
@@ -112,10 +112,10 @@ export function WalletLink({domain, onLinked}: WalletLinkProps) {
     return (
         <div className="wallet-link">
             <p>
-                Verify the connected wallet once before its first purchase. This signature is free and does not send a transaction.
+                在首次购买前，需要对当前钱包做一次签名验证。该签名是免费的，并不会发送任何交易。
             </p>
             <button className="btn--primary" type="button" onClick={handleLink} disabled={busy}>
-                {busy ? "Verifying…" : "Verify wallet to continue"}
+                {busy ? "验证中…" : "签名验证后继续"}
             </button>
             {error ? (
                 <p role="alert" style={{color: "var(--ck-body-color-danger)"}}>

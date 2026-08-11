@@ -31,17 +31,17 @@ interface MyCertificatesProps {
 type CertFilter = "all" | "confirmed" | "minting" | "pending" | "failed";
 
 const FILTER_OPTIONS: { value: CertFilter; label: string }[] = [
-    { value: "all", label: "All" },
-    { value: "confirmed", label: "Confirmed" },
-    { value: "minting", label: "Minting" },
-    { value: "pending", label: "Pending" },
-    { value: "failed", label: "Failed / Dead" },
+    { value: "all", label: "全部" },
+    { value: "confirmed", label: "已确认" },
+    { value: "minting", label: "铸造中" },
+    { value: "pending", label: "待处理" },
+    { value: "failed", label: "失败 / 已失效" },
 ];
 
 function formatDate(iso: string): string {
     const date = new Date(iso);
     if (Number.isNaN(date.valueOf())) return iso;
-    return new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric" }).format(date);
+    return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
 
 function CertStatusBadge({ status }: { status: CompletionRecord["status"] }) {
@@ -65,14 +65,14 @@ function CertDetail({ cert, onClose }: CertDetailProps) {
                 <div className="my-certificates__detail-title">
                     <CertStatusBadge status={cert.status} />
                     <span className="my-certificates__detail-id">
-                        onchainCertId <code>#{cert.onchainCertId}</code>
+                        链上证书 ID <code>#{cert.onchainCertId}</code>
                     </span>
                 </div>
                 <button
                     type="button"
                     className="btn--ghost btn--icon"
                     onClick={onClose}
-                    aria-label="Close certificate details"
+                    aria-label="关闭证书详情"
                 >
                     <svg
                         aria-hidden="true"
@@ -90,13 +90,13 @@ function CertDetail({ cert, onClose }: CertDetailProps) {
             </header>
             <dl className="my-certificates__detail-meta">
                 <div>
-                    <dt>Recipient</dt>
+                    <dt>接收人</dt>
                     <dd>
                         <code title={cert.recipientWallet}>{truncateAddress(cert.recipientWallet)}</code>
                     </dd>
                 </div>
                 <div>
-                    <dt>Metadata</dt>
+                    <dt>元数据</dt>
                     <dd>
                         <a
                             href={cert.metadataUri}
@@ -122,11 +122,11 @@ function CertDetail({ cert, onClose }: CertDetailProps) {
                     </dd>
                 </div>
                 <div>
-                    <dt>Completed</dt>
+                    <dt>完课时间</dt>
                     <dd>{formatDate(cert.completedAt)}</dd>
                 </div>
                 <div>
-                    <dt>Rule version</dt>
+                    <dt>规则版本</dt>
                     <dd>v{cert.ruleVersion}</dd>
                 </div>
             </dl>
@@ -157,10 +157,10 @@ function EmptyState({ hasAnyCert, filter, onResetFilter }: EmptyStateProps) {
                     <circle cx="12" cy="9" r="5" />
                     <path d="m8 13-2 8 6-3 6 3-2-8" />
                 </svg>
-                <h3>No certificates yet</h3>
-                <p>Complete a course 100% to mint your first on-chain certificate.</p>
+                <h3>暂无证书</h3>
+                <p>100% 完成一门课程，即可铸造你的首张链上证书。</p>
                 <Link to="/courses" className="btn--primary">
-                    Browse catalog
+                    浏览课程
                 </Link>
             </div>
         );
@@ -180,11 +180,11 @@ function EmptyState({ hasAnyCert, filter, onResetFilter }: EmptyStateProps) {
                 <circle cx="11" cy="11" r="7" />
                 <path d="m20 20-3.5-3.5" />
             </svg>
-            <h3>No {filter} certificates</h3>
-            <p>Nothing matches the current filter.</p>
+            <h3>暂无「{filter}」证书</h3>
+            <p>当前筛选下没有匹配的证书。</p>
             {onResetFilter ? (
                 <button type="button" className="btn--ghost" onClick={onResetFilter}>
-                    Show all certificates
+                    查看全部证书
                 </button>
             ) : null}
         </div>
@@ -217,7 +217,7 @@ export function MyCertificates({ className }: MyCertificatesProps) {
                     setError(cause.message);
                 }
             } else {
-                setError("Unable to load your certificates.");
+                setError("无法加载你的证书。");
             }
         } finally {
             setLoading(false);
@@ -285,9 +285,9 @@ export function MyCertificates({ className }: MyCertificatesProps) {
             <section className={`my-certificates panel${className ? ` ${className}` : ""}`}>
                 <div className="section-heading">
                     <div>
-                        <span className="eyebrow">Account</span>
-                        <h2>My certificates</h2>
-                        <p>Sign in to view the on-chain certificates you have earned.</p>
+                        <span className="eyebrow">账户</span>
+                        <h2>我的证书</h2>
+                        <p>请先登录，查看你已获得的链上证书。</p>
                     </div>
                 </div>
             </section>
@@ -304,21 +304,21 @@ export function MyCertificates({ className }: MyCertificatesProps) {
         >
             <header className="section-heading">
                 <div>
-                    <span className="eyebrow">Account</span>
-                    <h2 id="my-certificates-title">My certificates</h2>
-                    <p>On-chain certificates for completed courses, with mint status and recipient wallet.</p>
+                    <span className="eyebrow">账户</span>
+                    <h2 id="my-certificates-title">我的证书</h2>
+                    <p>已结课课程的链上证书，含铸造状态与接收人钱包。</p>
                 </div>
                 {hasAnyCert ? (
-                    <dl className="my-certificates__stats" aria-label="Certificate summary">
+                    <dl className="my-certificates__stats" aria-label="证书汇总">
                         <div className="my-certificates__stat">
-                            <dt>Earned</dt>
+                            <dt>已获得</dt>
                             <dd>{counts.all}</dd>
                         </div>
                         <div className="my-certificates__stat my-certificates__stat--hint">
-                            <dt>View</dt>
+                            <dt>查看</dt>
                             <dd>
                                 <Link to="/account/enrollments?filter=completed" className="my-certificates__stat-link">
-                                    Completed courses
+                                    已完成的课程
                                 </Link>
                             </dd>
                         </div>
@@ -328,15 +328,15 @@ export function MyCertificates({ className }: MyCertificatesProps) {
 
             {routeMissing ? (
                 <div className="notice notice--error" role="alert">
-                    The <code>GET /me/enrollments</code> endpoint is not wired in the current API build.
-                    Please ask the backend track to expose the route.
+                    当前 API 尚未挂载 <code>GET /me/enrollments</code> 路由，
+                    请联系后端同学开放该接口。
                 </div>
             ) : null}
             {error && !routeMissing ? (
                 <div className="notice notice--error" role="alert">
                     <span>{error}</span>{" "}
                     <button type="button" className="btn--ghost" onClick={() => void load()}>
-                        Retry
+                        重试
                     </button>
                 </div>
             ) : null}
@@ -354,7 +354,7 @@ export function MyCertificates({ className }: MyCertificatesProps) {
                 <div
                     className="filter-chips"
                     role="tablist"
-                    aria-label="Filter certificates by mint status"
+                    aria-label="按铸造状态筛选证书"
                 >
                     {FILTER_OPTIONS.map((opt) => {
                         const isActive = filter === opt.value;
@@ -385,7 +385,7 @@ export function MyCertificates({ className }: MyCertificatesProps) {
                     id="my-certificates-list"
                     className="my-certificates__list"
                     aria-busy="true"
-                    aria-label="Loading certificates"
+                    aria-label="证书加载中"
                 >
                     {[0, 1, 2].map((i) => (
                         <li key={i} className="my-certificates__skeleton">
@@ -404,7 +404,7 @@ export function MyCertificates({ className }: MyCertificatesProps) {
                 <ol
                     id="my-certificates-list"
                     className="my-certificates__list"
-                    aria-label="My certificates"
+                    aria-label="我的证书"
                 >
                     {filtered.map((e) => (
                         <li key={e.enrollmentId} className="my-certificates__item">
@@ -431,28 +431,28 @@ export function MyCertificates({ className }: MyCertificatesProps) {
                                     <time
                                         className="my-certificates__time"
                                         dateTime={e.completedAt}
-                                        title={`Completed on ${formatDate(e.completedAt)}`}
+                                        title={`完成于 ${formatDate(e.completedAt)}`}
                                     >
-                                        completed {formatDate(e.completedAt)}
+                                        完成于 {formatDate(e.completedAt)}
                                     </time>
                                 ) : null}
                             </header>
                             <footer className="my-certificates__foot">
                                 <span className="my-certificates__hint">
-                                    {e.completedLessonsTotal}/{e.requiredLessonsTotal} lessons · 100%
+                                    {e.completedLessonsTotal}/{e.requiredLessonsTotal} 课时 · 100%
                                 </span>
                                 <button
                                     type="button"
                                     className="my-certificates__cta"
                                     disabled={loadingCert === e.courseId}
                                     onClick={() => void onView(e.courseId)}
-                                    aria-label={`View certificate for ${e.courseTitle}`}
+                                    aria-label={`查看《${e.courseTitle}》的证书`}
                                 >
                                     {loadingCert === e.courseId ? (
-                                        "Loading…"
+                                        "加载中…"
                                     ) : (
                                         <>
-                                            View certificate
+                                            查看证书
                                             <svg
                                                 aria-hidden="true"
                                                 viewBox="0 0 24 24"

@@ -36,9 +36,9 @@ export function truncateAddress(address: string): string {
 
 /** 完课状态徽章文案（与 `learning.yaml#/CompletionRecord.status` 对齐）。 */
 export const COMPLETION_STATUS_LABEL: Record<CompletionRecord["status"], string> = {
-    pending: "Pending",
-    minting: "Minting",
-    confirmed: "Confirmed",
-    failed: "Failed",
-    dead: "Dead",
+    pending: "待处理",
+    minting: "铸造中",
+    confirmed: "已确认",
+    failed: "失败",
+    dead: "已失效",
 };

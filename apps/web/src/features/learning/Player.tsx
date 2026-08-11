@@ -84,14 +84,14 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
         } catch (cause) {
             if (cause instanceof ApiClientError) {
                 if (cause.status === 401) {
-                    setError("Please sign in to play this lesson.");
+                    setError("请先登录后再播放本课时。");
                 } else if (cause.status === 403) {
-                    setError("You need to purchase this course before watching.");
+                    setError("请先购买本课程后再观看。");
                 } else {
                     setError(cause.message);
                 }
             } else {
-                setError("Unable to fetch playback credentials.");
+                setError("无法获取播放凭证。");
             }
             setState("error");
             return null;
@@ -101,7 +101,7 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
     useEffect(() => {
         if (sessionLoading) return;
         if (!profile) {
-            setError("Please sign in to play this lesson.");
+            setError("请先登录后再播放本课时。");
             setState("error");
             return;
         }
@@ -190,17 +190,16 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
         >
             <div className="section-heading">
                 <div>
-                    <span className="eyebrow">Lesson</span>
+                    <span className="eyebrow">课时</span>
                     <h2 id="learning-player-title">
-                        {title || (state === "ready" ? "Now playing" : "Loading lesson…")}
+                        {title || (state === "ready" ? "正在播放" : "课时加载中…")}
                     </h2>
                     <p>
-                        Playback credentials are signed on-demand and expire within five minutes. Progress
-                        updates are throttled and never block the player.
+                        播放凭证按需签发，五分钟内有效。进度上报会节流处理，不会阻塞播放器。
                     </p>
                 </div>
                 {profile ? (
-                    <span className="badge" title="Signed in">{profile.displayName}</span>
+                    <span className="badge" title="已登录">{profile.displayName}</span>
                 ) : null}
             </div>
 
@@ -214,7 +213,7 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
                 {state === "loading" ? (
                     <div className="learning-player__placeholder" role="status" aria-live="polite">
                         <span className="learning-player__spinner" aria-hidden="true" />
-                        <span>Requesting playback credentials…</span>
+                        <span>正在请求播放凭证…</span>
                     </div>
                 ) : null}
 
@@ -229,7 +228,7 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
                         src={videoSrc}
                         onTimeUpdate={onTimeUpdate}
                         onSeeked={onSeeked}
-                        onError={() => setError("Video playback failed. The link may have expired.")}
+                        onError={() => setError("视频播放失败，链接可能已过期。")}
                     />
                 ) : null}
             </div>
@@ -237,12 +236,12 @@ export function Player({lessonId, courseId, title, className, onProgress}: Playe
             <footer className="learning-player__meta">
                 <span className="muted">
                     {state === "ready" && credential
-                        ? `Signed URL valid until ${new Date(credential.expiresAt).toLocaleTimeString()}`
-                        : "Awaiting credentials"}
+                        ? `签名链接有效期至 ${new Date(credential.expiresAt).toLocaleTimeString()}`
+                        : "等待凭证中"}
                 </span>
                 {progressFailures > 0 ? (
                     <span className="muted" title="进度上报失败次数（不影响播放）">
-                        Progress sync: {progressFailures} retry skipped
+                        进度同步失败：{progressFailures} 次（已跳过重试）
                     </span>
                 ) : null}
             </footer>

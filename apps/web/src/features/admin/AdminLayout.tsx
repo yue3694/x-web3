@@ -35,31 +35,31 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
     {
         key: "users",
-        label: "Users",
-        description: "List users, grant / revoke roles.",
+        label: "用户",
+        description: "查看用户、授予 / 收回角色。",
         path: "/admin/users",
         icon: "U",
     },
     {
         key: "courses",
-        label: "Courses",
-        description: "Review and publish submitted courses.",
+        label: "课程",
+        description: "审核并发布提交上来的课程。",
         path: "/admin/courses",
         icon: "C",
         sensitive: true,
     },
     {
         key: "chain",
-        label: "Chain",
-        description: "Indexing sync status & manual rewind.",
+        label: "链状态",
+        description: "索引同步状态与手动回滚。",
         path: "/admin/chain",
         icon: "⌬",
         sensitive: true,
     },
     {
         key: "dlq",
-        label: "DLQ",
-        description: "Unresolved dead-letter events & retry.",
+        label: "死信队列",
+        description: "未处理的死信事件与重试。",
         path: "/admin/dlq",
         icon: "D",
         sensitive: true,
@@ -166,12 +166,10 @@ export function AdminLayout() {
             code="SYSTEM_ADMIN"
             fallback={
                 <div className="panel" style={deniedStyle} role="alert">
-                    <strong>Access denied.</strong> You need{" "}
-                    <code>SYSTEM_ADMIN</code> permission to view this page.
+                    <strong>无权访问。</strong>你当前缺少 <code>SYSTEM_ADMIN</code> 权限，无法查看该页面。
                     {profile ? (
                         <div style={{marginTop: "0.4rem", color: "var(--fg-muted)"}}>
-                            Signed in as <code>{profile.displayName}</code> — ask a super
-                            admin to grant <code>SYSTEM_ADMIN</code>.
+                            当前登录身份：<code>{profile.displayName}</code> — 请联系超级管理员授予 <code>SYSTEM_ADMIN</code> 权限。
                         </div>
                     ) : null}
                 </div>
@@ -179,7 +177,7 @@ export function AdminLayout() {
         >
             <div style={layoutStyle} className="admin-layout">
                 <aside style={asideStyle} aria-label="Admin navigation">
-                    <h2 style={asideTitleStyle}>Admin Console</h2>
+                    <h2 style={asideTitleStyle}>管理控制台</h2>
                     <ul style={navListStyle}>
                         {NAV_ITEMS.map((item) => (
                                 <li key={item.key}>
@@ -195,7 +193,7 @@ export function AdminLayout() {
                                         </span>
                                         {item.sensitive ? (
                                             <span style={sensitiveBadgeStyle}>
-                                                sensitive
+                                                高敏感
                                             </span>
                                         ) : null}
                                     </NavLink>

@@ -93,15 +93,15 @@ export function SwapCard({defaultTokenIn = "YD", onSuccess}: SwapCardProps) {
 
   const onSwap = () => {
     execute.setError(null);
-    if (!isConnected || !address) return execute.setError("Connect a wallet first.");
-    if (onWrongChain) return execute.setError(`Switch to ${TARGET_CHAIN_NAME} to continue.`);
+    if (!isConnected || !address) return execute.setError("请先连接钱包。");
+    if (onWrongChain) return execute.setError(`请切换到 ${TARGET_CHAIN_NAME} 后继续。`);
     if (notDeployed || !inMeta.address || !outMeta.address) {
-      return execute.setError(`Swap contracts are not configured on ${TARGET_CHAIN_NAME} yet.`);
+      return execute.setError(`${TARGET_CHAIN_NAME} 上尚未配置兑换合约。`);
     }
-    if (!amountIn) return execute.setError("Enter an amount greater than zero.");
-    if (!quote) return execute.setError("No quote available yet.");
-    if (slippageBlocked) return execute.setError("Slippage above 10% is rejected.");
-    if (impactBlocked) return execute.setError("Price impact is 10% or higher — swap blocked.");
+    if (!amountIn) return execute.setError("请输入大于零的金额。");
+    if (!quote) return execute.setError("暂无可用报价。");
+    if (slippageBlocked) return execute.setError("滑点超过 10% 已被拒绝。");
+    if (impactBlocked) return execute.setError("价格影响达到或超过 10%，兑换已拦截。");
 
     void execute.swap({
       tokenIn: inMeta.address,
@@ -115,8 +115,8 @@ export function SwapCard({defaultTokenIn = "YD", onSuccess}: SwapCardProps) {
 
   // 三类错误共用一条 banner 通道，按严重程度从配置问题到交易失败排列。
   const notices = [
-    notDeployed ? `Swap router / token addresses are not configured for ${TARGET_CHAIN_NAME} yet.` : null,
-    quoteError ? `Quote failed: ${quoteError.message}` : null,
+    notDeployed ? `${TARGET_CHAIN_NAME} 上尚未配置兑换路由 / 代币地址。` : null,
+    quoteError ? `报价失败：${quoteError.message}` : null,
     execute.error,
   ].filter((n): n is string => n !== null);
 
@@ -124,11 +124,11 @@ export function SwapCard({defaultTokenIn = "YD", onSuccess}: SwapCardProps) {
     <section className="swap-card panel" aria-labelledby="swap-card-title">
       <header className="section-heading">
         <div>
-          <span className="eyebrow">Swap</span>
+          <span className="eyebrow">兑换</span>
           <h2 id="swap-card-title">
             {tokenIn} → {tokenOut}
           </h2>
-          <p>Uniswap V3 · {DEFAULT_FEE_TIER / 10_000}% pool · {TARGET_CHAIN_NAME}</p>
+          <p>Uniswap V3 · {DEFAULT_FEE_TIER / 10_000}% 池子 · {TARGET_CHAIN_NAME}</p>
         </div>
       </header>
 
@@ -154,7 +154,7 @@ export function SwapCard({defaultTokenIn = "YD", onSuccess}: SwapCardProps) {
       <SlippageControl valueBps={slippageBps} onChange={setSlippageBps} disabled={busy} />
 
       <label className="swap-card__deadline">
-        <span>Transaction deadline (minutes)</span>
+        <span>交易截止时间（分钟）</span>
         <input
           type="number"
           min={MIN_DEADLINE_MINS}

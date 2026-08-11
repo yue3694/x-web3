@@ -30,12 +30,12 @@ export function normalizeError(err: unknown): CheckoutError {
         return {code: "api", message: err.message};
     }
     if (isUserRejected(err)) {
-        return {code: "user-rejected", message: "User rejected"};
+        return {code: "user-rejected", message: "已取消"};
     }
     if (err instanceof Error && err.message.toLowerCase().includes("abi not yet exported")) {
         return {code: "abi-missing", message: err.message};
     }
-    return {code: "unknown", message: err instanceof Error ? err.message : "Unknown error"};
+    return {code: "unknown", message: err instanceof Error ? err.message : "未知错误"};
 }
 
 export function buttonLabel(opts: {
@@ -46,24 +46,24 @@ export function buttonLabel(opts: {
     priceYD: string;
     receiptLoading: boolean;
 }): string {
-    if (!opts.isConnected) return "Connect wallet to buy";
-    if (opts.onWrongChain) return opts.isSwitching ? "Switching…" : "Switch network";
+    if (!opts.isConnected) return "连接钱包以购买";
+    if (opts.onWrongChain) return opts.isSwitching ? "切换中…" : "切换网络";
     switch (opts.state) {
         case "idle":
-            return `Buy for ${opts.priceYD} YD`;
+            return `用 ${opts.priceYD} YD 购买`;
         case "preparing":
-            return "Preparing intent…";
+            return "正在准备支付意图…";
         case "checking":
-            return "Checking YD balance…";
+            return "正在检查 YD 余额…";
         case "approving":
-            return "Approve YD in wallet…";
+            return "请在钱包中授权 YD…";
         case "signing":
-            return "Sign in wallet…";
+            return "请在钱包中签名…";
         case "confirming":
-            return opts.receiptLoading ? "Confirming on-chain…" : "Awaiting receipt…";
+            return opts.receiptLoading ? "等待链上确认…" : "等待回执中…";
         case "done":
-            return "Purchase complete";
+            return "购买完成";
         case "failed":
-            return "Retry purchase";
+            return "重试购买";
     }
 }

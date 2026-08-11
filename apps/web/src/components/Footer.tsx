@@ -15,23 +15,23 @@ interface FooterColumn {
 
 const COLUMNS: FooterColumn[] = [
     {
-        title: "Product",
+        title: "产品",
         links: [
-            {label: "Course catalog", href: "/courses"},
-            {label: "Teacher studio", href: "/studio"},
-            {label: "Credential receipts", href: "/account/certificates"},
+            {label: "课程目录", href: "/courses"},
+            {label: "讲师工作台", href: "/studio"},
+            {label: "我的凭据", href: "/account/certificates"},
         ],
     },
     {
-        title: "Resources",
+        title: "资源",
         links: [
-            ...(TARGET_CHAIN_ID === 11155111 ? [{label: "Sepolia Etherscan", href: "https://sepolia.etherscan.io/", external: true}] : []),
-            {label: "EAS attestations", href: "https://attest.sh/", external: true},
-            {label: "Foundry book", href: "https://book.getfoundry.sh/", external: true},
+            ...(TARGET_CHAIN_ID === 11155111 ? [{label: "Sepolia 浏览器", href: "https://sepolia.etherscan.io/", external: true}] : []),
+            {label: "EAS 证明服务", href: "https://attest.sh/", external: true},
+            {label: "Foundry 手册", href: "https://book.getfoundry.sh/", external: true},
         ],
     },
     {
-        title: "Tech",
+        title: "技术栈",
         links: [
             {label: "React + wagmi v2", href: "/"},
             {label: "Solidity 0.8.24", href: "/"},
@@ -48,8 +48,8 @@ export function Footer() {
                 <div className="site-footer__brand">
                     <span className="site-footer__logo">◆ WEB3 UNIVERSITY</span>
                     <p>
-                        A university for the open internet. Built on {TARGET_CHAIN_NAME} with
-                        verifiable credentials for every receipt.
+                        一所为开放互联网而生的大学。基于 {TARGET_CHAIN_NAME} 构建，
+                        为每一笔回执提供可验证的链上凭据。
                     </p>
                 </div>
 
@@ -68,8 +68,8 @@ export function Footer() {
             </div>
 
             <div className="site-footer__bar">
-                <span>// system_status: online</span>
-                <span>© {year} x-web3 · MIT license</span>
+                <span>// system_status: 在线</span>
+                <span>© {year} x-web3 · MIT 协议</span>
                 {TARGET_CHAIN_ID === 11155111 ? (
                     <a href="https://sepolia.etherscan.io/" target="_blank" rel="noreferrer">sepolia.etherscan.io ↗</a>
                 ) : <span>chain_id: {TARGET_CHAIN_ID}</span>}

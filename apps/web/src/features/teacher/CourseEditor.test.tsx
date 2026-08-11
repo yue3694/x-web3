@@ -104,28 +104,28 @@ describe("teacherTypes helpers", () => {
 describe("CourseEditor", () => {
     it("renders seed chapters and disables Save curriculum before creating a draft", () => {
         render(<CourseEditor />);
-        expect(screen.getByText(/Course studio/i)).toBeTruthy();
-        expect(screen.getAllByPlaceholderText(/Chapter \d title/i).length).toBeGreaterThanOrEqual(3);
-        expect(screen.getByText(/Create a draft first/i)).toBeTruthy();
+        expect(screen.getByText(/课程工作台/i)).toBeTruthy();
+        expect(screen.getAllByPlaceholderText(/第 \d+ 章标题/).length).toBeGreaterThanOrEqual(3);
+        expect(screen.getByText(/请先创建草稿课程/i)).toBeTruthy();
     });
 
     it("adds and removes chapters + lessons", () => {
         render(<CourseEditor />);
-        const initialChapters = screen.getAllByPlaceholderText(/Chapter \d title/i).length;
-        fireEvent.click(screen.getAllByText(/\+ Add chapter/i)[0]!);
-        expect(screen.getAllByPlaceholderText(/Chapter \d title/i).length).toBe(initialChapters + 1);
-        const addLessonBtns = screen.getAllByText(/\+ Add lesson/i);
+        const initialChapters = screen.getAllByPlaceholderText(/第 \d+ 章标题/).length;
+        fireEvent.click(screen.getAllByText(/\+ 添加章节/)[0]!);
+        expect(screen.getAllByPlaceholderText(/第 \d+ 章标题/).length).toBe(initialChapters + 1);
+        const addLessonBtns = screen.getAllByText(/\+ 添加课时/);
         fireEvent.click(addLessonBtns[addLessonBtns.length - 1]!);
-        const removeLessonBtns = screen.getAllByLabelText("Remove lesson");
+        const removeLessonBtns = screen.getAllByLabelText("删除课时");
         expect(removeLessonBtns.length).toBeGreaterThan(0);
     });
 
     it("create-draft POSTs and unlocks Save curriculum", async () => {
         render(<CourseEditor />);
-        fireEvent.change(screen.getAllByPlaceholderText("Smart Contract Security")[0]!, {target: {value: "Intro"}});
-        fireEvent.submit(screen.getAllByRole("button", {name: /Create draft/i})[0]!.closest("form")!);
+        fireEvent.change(screen.getAllByPlaceholderText("智能合约安全")[0]!, {target: {value: "Intro"}});
+        fireEvent.submit(screen.getAllByRole("button", {name: /创建草稿/})[0]!.closest("form")!);
         await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
-        expect(screen.getByRole("button", {name: /Save curriculum/i})).toBeTruthy();
+        expect(screen.getByRole("button", {name: /保存大纲/})).toBeTruthy();
     });
 
     it("Save curriculum sends If-Match + correct payload; surfaces STALE_VERSION conflict UX", async () => {
@@ -138,15 +138,15 @@ describe("CourseEditor", () => {
         });
 
         render(<CourseEditor />);
-        fireEvent.change(screen.getAllByPlaceholderText("Smart Contract Security")[0]!, {target: {value: "Intro"}});
-        fireEvent.submit(screen.getAllByRole("button", {name: /Create draft/i})[0]!.closest("form")!);
+        fireEvent.change(screen.getAllByPlaceholderText("智能合约安全")[0]!, {target: {value: "Intro"}});
+        fireEvent.submit(screen.getAllByRole("button", {name: /创建草稿/})[0]!.closest("form")!);
         await waitFor(() => expect(mocks.create).toHaveBeenCalled(), {timeout: 2000});
 
         // 把所有 3 个 lesson title 都填上（seed 默认 empty，Save curriculum 才能 enabled）
-        const lessonTitles = screen.getAllByPlaceholderText("Lesson title");
+        const lessonTitles = screen.getAllByPlaceholderText("课时标题");
         lessonTitles.forEach((input, i) => fireEvent.change(input, {target: {value: `Lesson ${i + 1}`}}));
 
-        fireEvent.click(screen.getByRole("button", {name: /Save curriculum/i}));
+        fireEvent.click(screen.getByRole("button", {name: /保存大纲/}));
         await waitFor(() => expect(mocks.replace).toHaveBeenCalledTimes(1), {timeout: 2000});
         // courseApi.replaceCurriculum(id, version, body) — version 必须等于 course.currentVersion
         const [courseId, version, body] = mocks.replace.mock.calls[0]!;
@@ -156,8 +156,8 @@ describe("CourseEditor", () => {
         // apiClient.put 把 If-Match: <version> 注入到 headers；这里通过 mock 的调用参数间接验证 version
         // （避免在测试里 mock apiClient.put 后再断言 header——会让 test 变 fragile）
 
-        await waitFor(() => expect(screen.getByText(/Save conflict/i)).toBeTruthy(), {timeout: 2000});
-        expect(screen.getByRole("button", {name: /Reload latest/i})).toBeTruthy();
-        expect(screen.getByRole("button", {name: /Keep my edits/i})).toBeTruthy();
+        await waitFor(() => expect(screen.getByText(/保存冲突/)).toBeTruthy(), {timeout: 2000});
+        expect(screen.getByRole("button", {name: /重新载入最新版/})).toBeTruthy();
+        expect(screen.getByRole("button", {name: /保留我的修改/})).toBeTruthy();
     });
 });

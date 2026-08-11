@@ -25,7 +25,7 @@ const FALLBACK_CHAIN_ID = TARGET_CHAIN_ID;
 const KNOWN_CHAINS: ReadonlyArray<{id: number; label: string}> = [
     {id: TARGET_CHAIN_ID, label: TARGET_CHAIN_NAME},
     ...(TARGET_CHAIN_ID === 11155111 ? [] : [{id: 11155111, label: "Sepolia"}]),
-    {id: 1, label: "Ethereum mainnet"},
+    {id: 1, label: "以太坊主网"},
     {id: 137, label: "Polygon"},
     {id: 421614, label: "Arbitrum Sepolia"},
 ];
@@ -46,17 +46,17 @@ function lagColor(level: LagLevel): string {
 }
 
 function formatTimestamp(iso: string | null): string {
-    if (!iso) return "Unavailable";
+    if (!iso) return "暂无数据";
     const d = new Date(iso);
     if (Number.isNaN(d.valueOf())) return iso;
-    return `${new Intl.DateTimeFormat("en-US", {
+    return `${new Intl.DateTimeFormat("zh-CN", {
         year: "numeric",
-        month: "short",
-        day: "numeric",
+        month: "2-digit",
+        day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
-    }).format(d)} (${Math.max(0, Math.floor((Date.now() - d.valueOf()) / 1000))}s ago)`;
+    }).format(d)}（${Math.max(0, Math.floor((Date.now() - d.valueOf()) / 1000))} 秒前）`;
 }
 
 const sectionStyle = {marginTop: 0} as const;
@@ -141,7 +141,7 @@ export function ChainStatusPanel() {
             if (cause instanceof ApiClientError) {
                 setError(`${cause.code}: ${cause.message}`);
             } else {
-                setError("Unable to load chain sync status.");
+                setError("无法加载链同步状态。");
             }
         } finally {
             setLoading(false);
@@ -175,16 +175,16 @@ export function ChainStatusPanel() {
     return (
             <section className="panel" style={sectionStyle} aria-labelledby="chain-title">
                 <header style={headerStyle}>
-                    <span className="eyebrow">Admin · Chain</span>
-                    <h2 id="chain-title">Indexer sync</h2>
+                    <span className="eyebrow">管理 · 链状态</span>
+                    <h2 id="chain-title">索引器同步状态</h2>
                     <p style={{color: "var(--fg-muted)", margin: 0}}>
-                        Live status of the chain indexer. Threshold:{" "}
-                        <strong style={{color: lagColor("ok")}}>&lt; 30s</strong>{" "}
-                        healthy,{" "}
-                        <strong style={{color: lagColor("warn")}}>30–300s</strong>{" "}
-                        warning,{" "}
-                        <strong style={{color: lagColor("danger")}}>&gt; 300s</strong>{" "}
-                        lagging.
+                        链索引器的实时同步情况：延迟{" "}
+                        <strong style={{color: lagColor("ok")}}>&lt; 30 秒</strong>{" "}
+                        为健康，{" "}
+                        <strong style={{color: lagColor("warn")}}>30–300 秒</strong>{" "}
+                        为关注，{" "}
+                        <strong style={{color: lagColor("danger")}}>&gt; 300 秒</strong>{" "}
+                        为严重落后。
                     </p>
                 </header>
 
@@ -193,7 +193,7 @@ export function ChainStatusPanel() {
                         htmlFor="chain-select"
                         style={{color: "var(--fg-muted)", fontSize: "0.84rem"}}
                     >
-                        Chain
+                        链
                     </label>
                     <select
                         id="chain-select"
@@ -204,7 +204,7 @@ export function ChainStatusPanel() {
                     >
                         {KNOWN_CHAINS.map((c) => (
                             <option key={c.id} value={c.id}>
-                                {c.label} ({c.id})
+                                {c.label}（{c.id}）
                             </option>
                         ))}
                     </select>
@@ -214,7 +214,7 @@ export function ChainStatusPanel() {
                         onClick={() => void load()}
                         disabled={loading}
                     >
-                        {loading ? "Refreshing…" : "Refresh"}
+                        {loading ? "刷新中…" : "刷新"}
                     </button>
                 </div>
 
@@ -226,26 +226,26 @@ export function ChainStatusPanel() {
                             className="btn--ghost"
                             onClick={() => void load()}
                         >
-                            Retry
+                            重试
                         </button>
                     </div>
                 ) : null}
 
                 <div style={gridStyle}>
-                    <article style={tileBase} aria-label="Next block">
+                    <article style={tileBase} aria-label="下一区块">
                         <div style={tileLabelStyle}>nextBlock</div>
                         <div style={tileValueStyle}>
                             {status ? status.nextBlock.toLocaleString() : "—"}
                         </div>
                         <div style={tileSubStyle}>
-                            Block the indexer will process next.
+                            索引器下一批将处理的区块高度。
                         </div>
                     </article>
 
-                    <article style={tileBase} aria-label="Lag seconds">
+                    <article style={tileBase} aria-label="同步延迟">
                         <div style={tileLabelStyle}>lagSeconds</div>
                         <div style={{...tileValueStyle, color: fillColor}}>
-                            {status?.lagSeconds != null ? `${status.lagSeconds.toFixed(0)}s` : "—"}
+                            {status?.lagSeconds != null ? `${status.lagSeconds.toFixed(0)} 秒` : "—"}
                         </div>
                         <div style={gaugeTrackStyle} aria-hidden="true">
                             <div
@@ -257,24 +257,24 @@ export function ChainStatusPanel() {
                             />
                         </div>
                         <div style={tileSubStyle}>
-                            Level:{" "}
+                            当前档位：{" "}
                             <strong style={{color: fillColor}}>
                                 {level === "ok"
-                                    ? "healthy"
+                                    ? "健康"
                                     : level === "warn"
-                                      ? "warning"
-                                      : "lagging"}
+                                      ? "关注"
+                                      : "严重落后"}
                             </strong>
                         </div>
                     </article>
 
-                    <article style={tileBase} aria-label="Last updated">
+                    <article style={tileBase} aria-label="最近更新">
                         <div style={tileLabelStyle}>lastUpdatedAt</div>
                         <div style={{...tileValueStyle, fontSize: "1rem"}}>
                             {status ? formatTimestamp(status.lastUpdatedAt) : "—"}
                         </div>
                         <div style={tileSubStyle}>
-                            Server clock; frontend renders relative age.
+                            服务端时钟，前端展示相对时间。
                         </div>
                     </article>
                 </div>

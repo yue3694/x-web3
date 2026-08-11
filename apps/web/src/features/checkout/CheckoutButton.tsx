@@ -103,19 +103,19 @@ export function CheckoutButton({
     const onClick = async () => {
         setError(null);
         if (!isConnected || !address) {
-            setError("Connect a wallet first");
+            setError("请先连接钱包");
             return;
         }
         if (onWrongChain) {
-            setError(`Switch to ${TARGET_CHAIN_NAME} to continue.`);
+            setError(`请切换到 ${TARGET_CHAIN_NAME} 后继续。`);
             return;
         }
         if (!marketAddress) {
-            setError(`Market contract not configured on ${TARGET_CHAIN_NAME} yet.`);
+            setError(`${TARGET_CHAIN_NAME} 上尚未配置 Market 合约。`);
             return;
         }
         if (!publicClient) {
-            setError(`RPC client unavailable for ${TARGET_CHAIN_NAME}.`);
+            setError(`${TARGET_CHAIN_NAME} 的 RPC 客户端不可用。`);
             return;
         }
 
@@ -159,8 +159,8 @@ export function CheckoutButton({
             ]);
             if (balance < expectedAmount) {
                 throw new Error(TARGET_CHAIN_ID === 31337
-                    ? "Insufficient YD balance. For local Anvil, use the funded deployment account."
-                    : "Insufficient YD balance for this purchase");
+                    ? "YD 余额不足。本地 Anvil 请使用已注入资金的发币账户。"
+                    : "YD 余额不足以完成本次购买");
             }
             if (allowance < expectedAmount) {
                 setState("approving");
@@ -175,7 +175,7 @@ export function CheckoutButton({
                     hash: approvalHash,
                 });
                 if (approvalReceipt.status !== "success") {
-                    throw new Error("YD approval transaction reverted");
+                    throw new Error("YD 授权交易已回滚");
                 }
             }
 
@@ -193,7 +193,7 @@ export function CheckoutButton({
         } catch (cause) {
             if (isUserRejected(cause)) {
                 setState("idle");
-                setError("User rejected");
+                setError("已取消");
                 setIntent(null);
                 setTxHash(null);
                 return;
@@ -231,9 +231,9 @@ export function CheckoutButton({
                 onClick={onSwitch}
                 hidden={!onWrongChain}
                 disabled={isSwitching}
-                aria-label={`Switch network to ${TARGET_CHAIN_NAME}`}
+                aria-label={`切换到 ${TARGET_CHAIN_NAME}`}
             >
-                {isSwitching ? "Switching…" : `Switch to ${TARGET_CHAIN_NAME}`}
+                {isSwitching ? "切换中…" : `切换到 ${TARGET_CHAIN_NAME}`}
             </button>
 
             <button

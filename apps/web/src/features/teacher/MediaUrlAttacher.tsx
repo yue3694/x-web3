@@ -43,19 +43,19 @@ interface ValidationResult {
 function validateUrl(raw: string): ValidationResult {
     const trimmed = raw.trim();
     if (!trimmed) {
-        return { ok: false, reason: "URL is required." };
+        return { ok: false, reason: "请填写 URL。" };
     }
     let url: URL;
     try {
         url = new URL(trimmed);
     } catch {
-        return { ok: false, reason: "Not a valid URL — check the format." };
+        return { ok: false, reason: "URL 格式不正确，请检查。" };
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-        return { ok: false, reason: `Unsupported protocol: ${url.protocol.replace(":", "")}. Use http(s).` };
+        return { ok: false, reason: `不支持的协议：${url.protocol.replace(":", "")}，请使用 http(s)。` };
     }
     if (!url.hostname) {
-        return { ok: false, reason: "URL is missing a host." };
+        return { ok: false, reason: "URL 缺少主机名。" };
     }
     const pathname = url.pathname || "/";
     const filename = pathname.split("/").filter(Boolean).pop() ?? pathname;
@@ -94,7 +94,7 @@ function makeSyntheticAsset(url: string): MediaAsset {
 }
 
 export function MediaUrlAttacher({
-    label = "Attach video",
+    label = "附加视频",
     placeholder = DEFAULT_PLACEHOLDER,
     initialUrl = "",
     onAttached,
@@ -115,7 +115,7 @@ export function MediaUrlAttacher({
             event.preventDefault();
             setTouched(true);
             if (!validation.ok || !validation.normalized) {
-                setError(validation.reason ?? "Invalid URL.");
+                setError(validation.reason ?? "URL 无效。");
                 return;
             }
             setError("");
@@ -137,7 +137,7 @@ export function MediaUrlAttacher({
     if (attached) {
         return (
             <div className="media-url-attacher media-url-attacher--ready" role="status">
-                <span className="media-url-attacher__chip" aria-label="Attached video">
+                <span className="media-url-attacher__chip" aria-label="已附加视频">
                     <svg
                         aria-hidden="true"
                         viewBox="0 0 24 24"
@@ -161,9 +161,9 @@ export function MediaUrlAttacher({
                     type="button"
                     className="btn--ghost"
                     onClick={handleClear}
-                    aria-label="Remove attached video"
+                    aria-label="移除已附加的视频"
                 >
-                    Remove
+                    移除
                 </button>
             </div>
         );
@@ -208,14 +208,13 @@ export function MediaUrlAttacher({
                         className="media-url-attacher__submit"
                         disabled={!validation.ok}
                     >
-                        Attach
+                        附加
                     </button>
                 </span>
             </label>
             {validation.ok ? (
                 <p className="media-url-attacher__hint" aria-live="polite">
-                    Will attach <code>{validation.host}{validation.filename ? `/${validation.filename}` : ""}</code>{" "}
-                    to this lesson.
+                    将为该课时附加 <code>{validation.host}{validation.filename ? `/${validation.filename}` : ""}</code>。
                 </p>
             ) : null}
             {showError && error ? (

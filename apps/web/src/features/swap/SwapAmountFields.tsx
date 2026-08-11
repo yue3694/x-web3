@@ -37,7 +37,7 @@ export function SwapAmountFields({
     <>
       <div className="swap-card__leg">
         <label className="swap-card__field">
-          <span>You pay</span>
+          <span>支付</span>
           <input
             type="text"
             inputMode="decimal"
@@ -55,7 +55,7 @@ export function SwapAmountFields({
             if (e.target.value !== tokenIn) onFlip();
           }}
           disabled={disabled}
-          aria-label="Token to sell"
+          aria-label="卖出代币"
         >
           {TOKEN_SYMBOLS.map((s) => (
             <option key={s} value={s}>
@@ -70,14 +70,14 @@ export function SwapAmountFields({
         className="btn btn--ghost swap-card__flip"
         onClick={onFlip}
         disabled={disabled}
-        aria-label={`Flip direction to ${outMeta.symbol} → ${tokenIn}`}
+        aria-label={`将方向翻转为 ${outMeta.symbol} → ${tokenIn}`}
       >
-        ↓ Flip
+        ↓ 翻转
       </button>
 
       <div className="swap-card__leg">
         <label className="swap-card__field">
-          <span>You receive (estimated)</span>
+          <span>预计收到</span>
           <output className="swap-card__output">
             {quoting ? "…" : quote ? formatTokenAmount(quote.amountOut, outMeta.decimals) : "—"}
           </output>

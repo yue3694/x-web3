@@ -23,7 +23,7 @@ interface UserMenuProps {
     };
 }
 
-export function UserMenu({label = "Open account menu", wallet}: UserMenuProps) {
+export function UserMenu({label = "打开账户菜单", wallet}: UserMenuProps) {
     const {profile, logout, hasRole} = useSession();
     const {disconnect} = useDisconnect();
     const [open, setOpen] = useState(false);
@@ -56,7 +56,7 @@ export function UserMenu({label = "Open account menu", wallet}: UserMenuProps) {
 
     const initial = (profile.displayName?.[0] ?? "?").toUpperCase();
     const isSuper = hasRole("super_admin");
-    const walletStatus = wallet.connecting ? "Connecting…" : wallet.connected ? wallet.network : "Wallet disconnected";
+    const walletStatus = wallet.connecting ? "连接中…" : wallet.connected ? wallet.network : "钱包未连接";
 
     const manageWallet = () => {
         setOpen(false);
@@ -97,12 +97,12 @@ export function UserMenu({label = "Open account menu", wallet}: UserMenuProps) {
                     </header>
 
                     <section className="user-menu__section">
-                        <h3>Wallet</h3>
+                        <h3>钱包</h3>
                         <button type="button" className="user-menu__wallet-action" onClick={manageWallet}>
                             <span className="wallet-chip__dot" aria-hidden="true" />
                             <span>
                                 <strong>{walletStatus}</strong>
-                                <small>{wallet.connected ? wallet.address : "Connect to continue with onchain actions"}</small>
+                                <small>{wallet.connected ? wallet.address : "连接钱包以继续链上操作"}</small>
                             </span>
                             <span aria-hidden="true">→</span>
                         </button>
@@ -110,7 +110,7 @@ export function UserMenu({label = "Open account menu", wallet}: UserMenuProps) {
 
                     <footer className="user-menu__footer">
                         <button type="button" className="btn--danger-ghost" onClick={() => void onLogout()}>
-                            Sign out
+                            退出登录
                         </button>
                     </footer>
                 </div>
