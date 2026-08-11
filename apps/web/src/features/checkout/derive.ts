@@ -4,7 +4,10 @@
  * 1. courseKeyFromUuid：前端用 sha256(uuid) 计算课程键（与后端
  *    `apps/api/internal/order/order.go::CourseKey` 对齐）。合约事件
  *    CoursePurchased(courseKey, ...) 的 courseKey 必须与此一致。
- *    注：后端当前用 SHA-256 占位（todo：换 keccak256）；前端跟随。
+ *    算法 SSOT：api / web / worker test fixture 三端都用 SHA-256。
+ *    历史上 doc 曾误写为 keccak256；实际是 SHA-256 + 32 字节 hex。
+ *    合约侧把 courseKey 当 mapping key 不验证内容；改算法需同步
+ *    api/web/worker 三处 + ABI stub 注释。
  *
  * 2. uuidToBytes16：把 intent.id(UUID 字符串) 切成高 128 位 big-endian
  *    bytes16（合约事件里的 intentId 字段；worker 用其匹配

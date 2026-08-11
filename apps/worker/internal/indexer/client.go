@@ -52,6 +52,15 @@ type LogRecord struct {
 	Removed     bool
 }
 
+// Topics / Data / Removed 是 chain.LogRecordLike 接口的方法。
+// 任何想用 chain.Decode 处理 raw log 的代码都可以直接传 *LogRecord。
+//
+// Go 不允许 struct field 与 method 同名，因此这里改名为
+// TopicsList / DataBytes / IsRemoved；调用方显式实现接口时也用这套名字。
+func (r *LogRecord) TopicsList() []common.Hash { return r.Topics }
+func (r *LogRecord) DataBytes() []byte         { return r.Data }
+func (r *LogRecord) IsRemoved() bool           { return r.Removed }
+
 // Client 抽象了 indexer 与 RPC 节点交互所需的最小能力集。
 //
 // 设计动机：
@@ -167,6 +176,22 @@ func (c *RPCClient) Close() {
 	if c.rc != nil {
 		c.rc.Close()
 	}
+}
+
+// RawRPC 返回底层 *rpc.Client，供同进程内其它组件（cert consumer /
+// treasury monitor / ChainTxParams）复用已 dial 的连接。
+//
+// ⚠️ 调用方**不得 Close** 这个 client — 它的生命周期由 RPCPool 统一管理；
+// 多次 Close 会让后续 dial 失败并把 RPCPool 标 unhealthy。
+func (c *RPCClient) RawRPC() *rpc.Client { return c.rc }
+
+// AsRPCClient 在 Client 接口实现上做 type assertion；
+// 给不想直接依赖 *RPCClient 的代码用（典型：ChainTxParams）。
+func AsRPCClient(c Client) (*RPCClient, bool) {
+	if rc, ok := c.(*RPCClient); ok {
+		return rc, true
+	}
+	return nil, false
 }
 
 // rpcHeadSub 适配 types.Header 通道为 indexer.Header。

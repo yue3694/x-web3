@@ -327,12 +327,17 @@ FROM orders WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2`, userID, limit)
 	return out, rows.Err()
 }
 
-// CourseKey keccak256(uuid_bytes) — 用 SHA-256 占位（仅占位；生产应替换为
-// go-ethereum/crypto.Keccak256）。
+// CourseKey sha256(uuid_bytes) — SSOT 三端必须用同一算法（api / web / worker test fixture）。
 //
-// 合约侧的 courseKey 必须用同样的算法生成（前端构造 + 合约事件）。
-// 当前占位实现是为了让 intent 字段有值；F03-T01 合约落定后需要切换为
-// Keccak256 并在两端验证一致。
+// 算法历史：
+//   - 早期 doc 误写为 keccak256；实际实现是 SHA-256，本注释对齐实现。
+//   - 合约侧（packages/contracts/src/CourseMarket.sol）把 courseKey 当
+//     mapping key，不验证内容字节含义；改 keccak256 需同步：
+//     1) 这里 2) apps/web/src/features/checkout/derive.ts::courseKeyFromUuid
+//     3) apps/web/src/contracts/market.abi.ts 注释
+//     4) apps/worker/internal/order/confirmer_test.go::courseKeyForTest
+//     5) 任何 frontend-intent 序列化/反序列化测试。
+//   - 阶段 A 评估后决定：保留 SHA-256 不动；合约不验内容，跨端漂移风险大于收益。
 func CourseKey(courseID uuid.UUID) []byte {
 	h := sha256.Sum256(courseID[:])
 	return h[:]

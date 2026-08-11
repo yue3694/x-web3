@@ -1,7 +1,9 @@
 // CourseMarket ABI 占位（与 `packages/contracts/src/CourseMarket.sol` 一致）。
 //
 // 当前函数签名：buyCourse(bytes32 courseKey, uint256 expectedAmount, bytes16 intentId)
-//   - courseKey：链上课程键（前端从 UUID 用 sha256 计算；与后端 CourseKey 对齐）
+//   - courseKey：链上课程键，前端从 UUID 用 sha256 计算（与后端
+//     api/internal/order/order.go::CourseKey 对齐；worker test fixture
+//     courseKeyForTest 同样 sha256）。合约不验证内容，三端 SSOT 是 SHA-256。
 //   - expectedAmount：unit256（YD wei，6 decimals）。API 颁发 intent 时锁定；
 //     合约端二次校验防 price tampering。
 //   - intentId：bytes16 = UUID 高 128 位（worker 用其匹配 purchase_intents.id）。
