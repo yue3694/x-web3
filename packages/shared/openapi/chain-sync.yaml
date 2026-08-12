@@ -1,0 +1,289 @@
+openapi: 3.0.3
+info:
+    title: x-web3 University — Chain Sync Admin API
+    version: 0.1.0
+    description: |
+        链同步 / DLQ 管理 API（F03-T12 / F03-T13）。
+        与 `apps/api/internal/admin/handlers/chain_rewind.go` 的 handler 严格对齐：
+          - POST /admin/chain/rewind : 手动 rewind（SYSTEM_ADMIN + audit）
+          - GET  /admin/dlq          : 列出未解决 DLQ
+          - POST /admin/dlq/{id}/retry : 标记 re-enqueue（SYSTEM_ADMIN + audit）
+        所有 endpoint 均要求 `PermSystemAdmin`；鉴权由 main.go 装载的
+        `auth.Middleware + rbac.Middleware(PermSystemAdmin)` 完成，
+        handler 内部仍做二次校验（defense in depth）。
+        鉴权：会话 cookie（与 `auth.yaml` 一致）。
+servers:
+    - url: https://api.x-web3.example.com/api/v1
+      description: Production
+    - url: http://localhost:8080/api/v1
+      description: Local dev
+tags:
+    - name: chainSync
+      description: chain rewind / checkpoint 管理
+    - name: dlq
+      description: DLQ 列表与解决
+paths:
+    /admin/chain/rewind:
+        post:
+            tags: [chainSync]
+            operationId: rewindChain
+            summary: 手动 rewind（SYSTEM_ADMIN + audit）
+            description: |
+                在事务内锁 `chain_checkpoints(chain_id, 'indexer')` 行（与 worker 端
+                `ManualRewind` 互斥），把 `chain_events` 在 fromBlock 之后标记为
+                非 canonical、把 `orders` 在该范围且处于 confirming/confirmed 的
+                标记为 `reorged`，并写入 `chain_reorgs` 审计行。
+
+                无论结果如何都会留 audit 痕迹：denied / attempted / failed / succeeded
+                均有独立 status，便于事后追溯。
+
+                字段命名：
+                  - 请求里的 `fromBlock` 是「从此 block 开始（含）回退」的语义，
+                    与 worker 端 `ManualRewind(ctx, chainID, fromBlock)` 同名；
+                    历史 PRD 中提到的 `toBlock` 在本仓库不存在，按 handler 实际
+                    字段命名 `fromBlock`，避免契约与实现 drift。
+            security:
+                - sessionCookie: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RewindRequest'
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RewindResponse'
+                '400':
+                    $ref: './errors.yaml#/components/responses/BadRequest'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    $ref: './errors.yaml#/components/responses/Forbidden'
+                '500':
+                    $ref: './errors.yaml#/components/responses/Internal'
+    /admin/dlq:
+        get:
+            tags: [dlq]
+            operationId: listDlq
+            summary: 列出 unresolved DLQ（按 created_at desc）
+            description: |
+                拉最近 N 条未解决 DLQ；上限 500。
+                对齐 `apps/api/internal/admin/handlers/dlq_store.go:PGDLQStore.ListUnresolved`。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: query
+                  name: limit
+                  schema:
+                      type: integer
+                      minimum: 1
+                      maximum: 500
+                      default: 100
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                required: [items, count]
+                                properties:
+                                    items:
+                                        type: array
+                                        items:
+                                            $ref: '#/components/schemas/DlqRow'
+                                    count:
+                                        type: integer
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    $ref: './errors.yaml#/components/responses/Forbidden'
+    /admin/dlq/{id}/retry:
+        post:
+            tags: [dlq]
+            operationId: retryDlq
+            summary: 标记 DLQ 已解决（原子 resolved + retry_count +1）
+            description: |
+                校验 `resolution ∈ {replayed, ignored, manual}`：
+                  - replayed → audit.ActionDLQRetriedReplay
+                  - ignored  → audit.ActionDLQRetriedIgnored
+                  - manual   → audit.ActionDLQRetriedManual
+                实现走单条 UPDATE（`WHERE id=$1 AND resolved=false`），
+                保证 retry_count 仅在状态真正从 false → true 翻转时才 +1，
+                避免「retry +1 但状态没变」的脏数据。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: path
+                  name: id
+                  required: true
+                  schema:
+                      type: integer
+                      format: int64
+                      minimum: 1
+                      description: DLQ 行 id（正整数）。
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DlqRetryRequest'
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DlqRetryResponse'
+                '400':
+                    description: |
+                        resolution 非法（`BAD_REQUEST`）/ id 非正整数（`BAD_REQUEST`）。
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+                '403':
+                    $ref: './errors.yaml#/components/responses/Forbidden'
+                '404':
+                    $ref: './errors.yaml#/components/responses/NotFound'
+                '409':
+                    description: DLQ 已解决（`CONFLICT`）
+                    content:
+                        application/json:
+                            schema:
+                                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+components:
+    securitySchemes:
+        sessionCookie:
+            type: apiKey
+            in: cookie
+            name: xweb3_sid
+    schemas:
+        RewindRequest:
+            type: object
+            description: |
+                入参字段对齐 `apps/api/internal/admin/handlers/chain_rewind.go:rewindRequest`。
+            required: [chainId, fromBlock]
+            properties:
+                chainId:
+                    type: integer
+                    format: int64
+                    description: EVM chain id。
+                fromBlock:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                    description: |
+                        从此 block 开始（含）回退的语义。
+                        必须 ≥ 0；负数返回 `BAD_REQUEST`。
+                reason:
+                    type: string
+                    description: |
+                        操作原因（写入 audit before + chain_reorgs.payload.userReason）。
+                        留空时服务端默认填 `"admin manual rewind"`。
+        RewindResponse:
+            type: object
+            description: |
+                返回字段对齐 `ChainRewindHandler.PostRewind` 的响应 JSON。
+            required:
+                - chainId
+                - fromBlock
+                - orphanedEvents
+                - affectedOrders
+                - rewoundAt
+            properties:
+                chainId:
+                    type: integer
+                    format: int64
+                fromBlock:
+                    type: integer
+                    format: int64
+                orphanedEvents:
+                    type: integer
+                    format: int64
+                    description: 被标 non-canonical 的 chain_events 行数。
+                affectedOrders:
+                    type: integer
+                    format: int64
+                    description: 被标 reorged 的 orders 行数。
+                rewoundAt:
+                    type: string
+                    format: date-time
+        DlqRow:
+            type: object
+            description: |
+                字段对齐 `apps/api/internal/admin/handlers/chain_rewind.go:dlqRow`。
+            required:
+                - id
+                - consumer
+                - kind
+                - severity
+                - summary
+                - payload
+                - retryCount
+                - resolved
+                - createdAt
+            properties:
+                id:
+                    type: integer
+                    format: int64
+                consumer:
+                    type: string
+                    description: 写入 DLQ 的消费者（如 `"indexer"` / `"certificate"`）。
+                chainId:
+                    type: integer
+                    format: int64
+                    nullable: true
+                kind:
+                    type: string
+                severity:
+                    type: string
+                summary:
+                    type: string
+                payload:
+                    type: object
+                    description: 任意 JSON（来自 `dlq_events.payload` 列）。
+                    additionalProperties: true
+                retryCount:
+                    type: integer
+                resolved:
+                    type: boolean
+                createdAt:
+                    type: string
+                    format: date-time
+                resolution:
+                    type: string
+                    nullable: true
+                    description: 解决方式（replayed / ignored / manual）；resolved=false 时为 null。
+        DlqRetryRequest:
+            type: object
+            description: |
+                入参字段对齐 `apps/api/internal/admin/handlers/chain_rewind.go:retryReq`。
+            required: [resolution]
+            properties:
+                resolution:
+                    type: string
+                    enum: [replayed, ignored, manual]
+                    description: |
+                        解决方式。其它值返回 `BAD_REQUEST`。
+        DlqRetryResponse:
+            type: object
+            description: |
+                返回字段对齐 `DLQHandler.Retry` 的响应 JSON。
+            required: [id, resolution, resolvedAt]
+            properties:
+                id:
+                    type: integer
+                    format: int64
+                resolution:
+                    type: string
+                    enum: [replayed, ignored, manual]
+                resolvedAt:
+                    type: string
+                    format: date-time

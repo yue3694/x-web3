@@ -1,0 +1,202 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Single-node test backend for x-web3 (API, worker, PostgreSQL and Redis).
+
+Parameters:
+  ArtifactBucket:
+    Type: String
+  ApiArtifactKey:
+    Type: String
+  WorkerArtifactKey:
+    Type: String
+  MigrationsArtifactKey:
+    Type: String
+  RuntimeSecretArn:
+    Type: String
+    NoEcho: true
+  InstanceType:
+    Type: String
+    Default: t4g.small
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+
+Resources:
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ["https://university.inxyu.cn"]
+            AllowedMethods: [GET, PUT, HEAD]
+            AllowedHeaders: ["*"]
+            ExposedHeaders: [ETag]
+            MaxAge: 3600
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+
+  PublicCertificateMetadataPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MediaBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicCertificateMetadata
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${MediaBucket.Arn}/certificate-metadata/*"
+
+  BackendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTP access to the x-web3 test API
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourcePrefixListId: pl-3b927c52 # AWS-managed CloudFront origin-facing network
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-backend"
+
+  BackendRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ReadDeploymentArtifactsAndRuntimeSecret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${ArtifactBucket}/backend/*"
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref RuntimeSecretArn
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject]
+                Resource: !Sub "${MediaBucket.Arn}/*"
+
+  BackendProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref BackendRole]
+
+  BackendInstance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref BackendProfile
+      SecurityGroupIds: [!GetAtt BackendSecurityGroup.GroupId]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            Encrypted: true
+            VolumeSize: 30
+            VolumeType: gp3
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-backend"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          dnf install -y docker jq aws-cfn-bootstrap
+          systemctl enable --now docker
+          mkdir -p /opt/x-web3/migrations /opt/x-web3/data/postgres /opt/x-web3/data/redis
+          aws s3 cp s3://${ArtifactBucket}/${ApiArtifactKey} /opt/x-web3/api
+          aws s3 cp s3://${ArtifactBucket}/${WorkerArtifactKey} /opt/x-web3/worker
+          aws s3 cp s3://${ArtifactBucket}/${MigrationsArtifactKey} /tmp/migrations.tar.gz
+          chmod 0755 /opt/x-web3/api /opt/x-web3/worker
+          tar -xzf /tmp/migrations.tar.gz -C /opt/x-web3/migrations
+          aws secretsmanager get-secret-value --secret-id '${RuntimeSecretArn}' --query SecretString --output text > /opt/x-web3/runtime.json
+          jq --arg bucket '${MediaBucket}' --arg region '${AWS::Region}' \
+            '. + {OBJECT_STORE_BUCKET:$bucket,AWS_REGION:$region}' /opt/x-web3/runtime.json > /opt/x-web3/runtime.with-store.json
+          mv /opt/x-web3/runtime.with-store.json /opt/x-web3/runtime.json
+          chmod 0600 /opt/x-web3/runtime.json
+          jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' /opt/x-web3/runtime.json > /opt/x-web3/app.env
+          chmod 0600 /opt/x-web3/app.env
+          db_password="$(jq -r .POSTGRES_PASSWORD /opt/x-web3/runtime.json)"
+          database_url="$(jq -r .DATABASE_URL /opt/x-web3/runtime.json)"
+          docker run -d --name postgres --restart unless-stopped --network host \
+            -e POSTGRES_DB=xweb3 -e POSTGRES_USER=xweb3 -e POSTGRES_PASSWORD="$db_password" \
+            -v /opt/x-web3/data/postgres:/var/lib/postgresql/data postgres:16-alpine
+          docker run -d --name redis --restart unless-stopped --network host \
+            -v /opt/x-web3/data/redis:/data redis:7-alpine redis-server --appendonly yes
+          for i in $(seq 1 60); do docker exec postgres pg_isready -U xweb3 -d xweb3 && break; sleep 2; done
+          docker run --rm --network host -v /opt/x-web3/migrations:/migrations migrate/migrate:v4.18.3 \
+            -path=/migrations -database "$database_url" up
+          cat >/etc/systemd/system/x-web3-api.service <<'UNIT'
+          [Unit]
+          Description=x-web3 API
+          After=docker.service
+          Requires=docker.service
+          [Service]
+          EnvironmentFile=/opt/x-web3/app.env
+          ExecStart=/opt/x-web3/api
+          Restart=always
+          RestartSec=3
+          User=ec2-user
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          cat >/etc/systemd/system/x-web3-worker.service <<'UNIT'
+          [Unit]
+          Description=x-web3 Worker
+          After=docker.service
+          Requires=docker.service
+          [Service]
+          EnvironmentFile=/opt/x-web3/app.env
+          ExecStart=/opt/x-web3/worker
+          Restart=always
+          RestartSec=3
+          User=ec2-user
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          mkdir -p /opt/x-web3/nginx
+          cat >/opt/x-web3/nginx/default.conf <<'NGINX'
+          server {
+            listen 80;
+            location / { proxy_pass http://127.0.0.1:8080; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
+          }
+          NGINX
+          systemctl daemon-reload
+          systemctl enable --now x-web3-api x-web3-worker
+          docker run -d --name nginx --restart unless-stopped --network host -v /opt/x-web3/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro nginx:1.27-alpine
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1/readyz && break; sleep 2; done
+          curl -fsS http://127.0.0.1/readyz
+          /opt/aws/bin/cfn-signal --success true --stack '${AWS::StackName}' --resource BackendInstance --region '${AWS::Region}'
+
+Outputs:
+  MediaBucketName:
+    Value: !Ref MediaBucket
+  ApiOriginDomain:
+    Description: Public DNS consumed only as the CloudFront custom origin.
+    Value: !GetAtt BackendInstance.PublicDnsName
+  InstanceId:
+    Value: !Ref BackendInstance
+  ApiHealthUrl:
+    Value: !Sub "http://${BackendInstance.PublicDnsName}/readyz"

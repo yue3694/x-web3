@@ -1,9 +1,7 @@
 import {createConfig, http} from "wagmi";
-import {sepolia} from "wagmi/chains";
 import {getDefaultConfig} from "connectkit";
 
-const SEPOLIA_RPC_URL =
-    import.meta.env.VITE_SEPOLIA_RPC_URL ?? "https://rpc.sepolia.org";
+import {targetChain, targetRpcUrl} from "./chains";
 
 // WalletConnect Cloud project ID — required only for the WalletConnect connector.
 // Get one at https://cloud.walletconnect.com. Fallback to empty string keeps
@@ -22,11 +20,15 @@ export const wagmiConfig = createConfig(
         appDescription: "On-chain Notepad",
         appUrl: APP_URL,
         walletConnectProjectId: WALLETCONNECT_PROJECT_ID,
-        chains: [sepolia],
+        chains: [targetChain],
         transports: {
-            [sepolia.id]: http(SEPOLIA_RPC_URL),
+            [targetChain.id]: http(targetRpcUrl),
         },
         ssr: false,
+        // Playwright intercepts individual JSON-RPC calls. Keeping multicall
+        // off in the explicit dev stub makes mocked reads deterministic;
+        // production retains viem's default batching behaviour.
+        batch: {multicall: import.meta.env.VITE_PRIVY_DEV_STUB !== "1"},
     }),
 );
 

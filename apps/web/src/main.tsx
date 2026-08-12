@@ -3,16 +3,19 @@ import {createRoot} from "react-dom/client";
 import {QueryClient, QueryClientProvider} from "@tanstack/react-query";
 import {WagmiProvider} from "wagmi";
 import {ConnectKitProvider} from "connectkit";
+import {BrowserRouter} from "react-router-dom";
 
 import {App} from "./App";
 import {wagmiConfig} from "./wagmi";
+import {SessionProvider} from "./auth/SessionContext";
+import {PrivyRuntime} from "./auth/PrivyRuntime";
+import {WalletAutoSession} from "./auth/WalletAutoSession";
+import {NotifyProvider} from "./components/NotifyProvider";
 import "./styles.css";
 
 const queryClient = new QueryClient();
 
-// Cyberpunk theme overrides ConnectKit's CSS variables. The connector modal
-// reuses the same neon palette as the main app so the wallet picker feels
-// native to the dashboard.
+// Cyberpunk theme overrides ConnectKit's CSS variables.
 const cyberpunkTheme = {
     "--ck-font-family":
         "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
@@ -20,7 +23,7 @@ const cyberpunkTheme = {
     "--ck-primary-button-color": "#05050f",
     "--ck-primary-button-background": "#ff2e9a",
     "--ck-primary-button-box-shadow": "0 0 18px rgba(255, 46, 154, 0.55)",
-    "--ck-primary-button-hover-background": "#ff4ba8",
+    "--ck-primary-button-hover-background": "#ff4baa",
     "--ck-primary-button-hover-color": "#05050f",
     "--ck-primary-button-hover-box-shadow":
         "0 0 24px rgba(255, 46, 154, 0.75)",
@@ -61,9 +64,10 @@ if (!rootElement) throw new Error("Root element #root not found");
 
 createRoot(rootElement).render(
     <StrictMode>
-        <WagmiProvider config={wagmiConfig}>
-            <QueryClientProvider client={queryClient}>
-                <ConnectKitProvider
+		<PrivyRuntime>
+			<WagmiProvider config={wagmiConfig}>
+				<QueryClientProvider client={queryClient}>
+					<ConnectKitProvider
                     mode="dark"
                     customTheme={cyberpunkTheme}
                     options={{
@@ -72,9 +76,17 @@ createRoot(rootElement).render(
                         hideRecentBadge: false,
                     }}
                 >
-                    <App />
-                </ConnectKitProvider>
-            </QueryClientProvider>
-        </WagmiProvider>
+						<SessionProvider>
+							<NotifyProvider>
+                                <WalletAutoSession />
+                                <BrowserRouter>
+							        <App />
+                                </BrowserRouter>
+							</NotifyProvider>
+						</SessionProvider>
+					</ConnectKitProvider>
+				</QueryClientProvider>
+			</WagmiProvider>
+		</PrivyRuntime>
     </StrictMode>,
 );

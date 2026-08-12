@@ -47,6 +47,34 @@ id 单调递增不复用。详见 `docs/ARCHITECTURE.md` §5 与 `packages/contr
 如需部署：参考 `packages/contracts/script/DeployCounter.s.sol`，
 部署完把地址补到本表 + `apps/web/src/contracts/deployments.ts → counterDeployments.sepolia.address`。
 
+### YDToken
+
+| 字段 | 值 |
+|------|------|
+| 地址 | [`0x734F98B0b7e34B7A4E655378baA9760a9368AE97`](https://sepolia.etherscan.io/address/0x734f98b0b7e34b7a4e655378baa9760a9368ae97) |
+| 部署交易 | [`0xcf670061…8aea4787`](https://sepolia.etherscan.io/tx/0xcf670061c1183def32865b0d8fdfc62db03d2529906de6f7eb7ae2548aea4787) |
+| 区块 | `11466727` |
+| 状态 | 已部署，源码待 Etherscan API key 验证 |
+
+### CourseMarket
+
+| 字段 | 值 |
+|------|------|
+| 地址 | [`0x95F3C314f43fBFB1D5420197F7569d8fE0c92706`](https://sepolia.etherscan.io/address/0x95f3c314f43fbfb1d5420197f7569d8fe0c92706) |
+| 部署交易 | [`0xc51e7882…f04f0ff9`](https://sepolia.etherscan.io/tx/0xc51e78824160ecc07d4bc95a381230a74a614aeb2cf368a931cdbfc4f04f0ff9) |
+| 区块 | `11466730` |
+| 状态 | 已部署（尚未配置课程），源码待验证 |
+
+### CertificateNFT
+
+| 字段 | 值 |
+|------|------|
+| 地址 | [`0xC708E0040FA8659ee3A869D0eba6020206a0b90C`](https://sepolia.etherscan.io/address/0xc708e0040fa8659ee3a869d0eba6020206a0b90c) |
+| 部署交易 | [`0x4b5b6eb3…87c07cc4`](https://sepolia.etherscan.io/tx/0x4b5b6eb3740c85cec2aab2be2cc1bb62d5c6aa6644077649a772718887c07cc4) |
+| BURNER_ROLE 交易 | [`0xaab46978…a57818b`](https://sepolia.etherscan.io/tx/0xaab46978bc8bfaaee06f1807dc4f46f862b6e782562375563847f695fa57818b) |
+| 区块 | `11466733` |
+| 状态 | 已部署，admin/minter/burner 为测试部署钱包，源码待验证 |
+
 ---
 
 ## 维护流程

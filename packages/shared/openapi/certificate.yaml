@@ -1,0 +1,139 @@
+openapi: 3.1.0
+info:
+    title: x-web3 University — Certificate API
+    version: 0.1.0
+    description: |
+        我的证书查询 API（F04-T08）。
+        字段命名与以下实现文件严格对齐：
+          - `apps/api/internal/handlers/certificate.go`（`GET /me/certificates`）
+          - `apps/api/internal/learning/queries.go`（`CertificateItem`）
+          - `apps/api/internal/learning/learning.go` 与 `apps/api/internal/learning/queries.go`
+            当前未返回 `chainId` / `tokenId` / `contractAddress` / `mintedAt`，
+            本契约为目标字段；后端在 `CertificateItem` 上做 JOIN 扩展后才能完全对齐。
+
+        鉴权：会话 cookie（与 `auth.yaml` 一致）。
+servers:
+    - url: https://api.x-web3.example.com/api/v1
+      description: Production
+    - url: http://localhost:8080/api/v1
+      description: Local dev
+tags:
+    - name: certificate
+      description: 证书签发状态与链上元数据
+paths:
+    /me/certificates:
+        get:
+            tags: [certificate]
+            operationId: listMyCertificates
+            summary: 当前用户的证书列表（含链上元数据 + mint 状态）
+            description: |
+                与 `apps/api/internal/learning.queries.go` 的 `CertificateItem` 严格对齐。
+                排序：`createdAt DESC`；分页走 `limit`（默认 50，上限 50）。
+                `mintedAt` / `chainId` / `tokenId` / `contractAddress` 是后端 `CertificateItem`
+                在本次切片需要补齐的扩展字段（JOIN `certificates` + 部署注册表）。
+            security:
+                - sessionCookie: []
+            parameters:
+                - in: query
+                  name: limit
+                  schema:
+                      type: integer
+                      minimum: 1
+                      maximum: 50
+                      default: 50
+            responses:
+                '200':
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CertificateListResponse'
+                '401':
+                    $ref: './errors.yaml#/components/responses/Unauthorized'
+components:
+    securitySchemes:
+        sessionCookie:
+            type: apiKey
+            in: cookie
+            name: xweb3_sid
+    schemas:
+        CertificateStatus:
+            type: string
+            enum: [pending, minting, confirmed, failed, dead]
+            description: |
+                证书签发状态机（与 `certificates.status` CHECK 约束一致）：
+                  - pending   : 完课记录已落库，等待 worker 抢 job
+                  - minting   : worker 已发 tx，等待确认
+                  - confirmed : 已上链且达 confirm depth
+                  - failed    : 本轮上链 revert，等待指数退避
+                  - dead      : 永久失败（attempts ≥ max_attempts）
+        CertificateSummary:
+            type: object
+            description: |
+                字段对齐 `apps/api/internal/learning.CertificateItem` + 扩展。
+                `metadataUri` / `recipientWallet` 来自 `certificates`；`status` 来自
+                `certificate_jobs`；`mintedAt` 来自 `certificate_jobs.confirmed_at`。
+                `tokenId` / `chainId` / `contractAddress` 在后端 `CertificateItem` 上做
+                JOIN 扩展后才能返回（待 F04-T08 后端扩展落地）。
+            required:
+                - certificateId
+                - courseId
+                - courseTitle
+                - onchainCertId
+                - status
+                - mintedAt
+                - chainId
+                - tokenId
+                - contractAddress
+                - metadataUri
+                - recipientWallet
+            properties:
+                certificateId:
+                    type: string
+                    format: uuid
+                    description: certificates.id（DB 主键）
+                courseId:
+                    type: string
+                    format: uuid
+                courseTitle:
+                    type: string
+                onchainCertId:
+                    type: string
+                    description: 链上 uint256 decimal string（与 `bytes32 / uint256` 一致）
+                status:
+                    $ref: '#/components/schemas/CertificateStatus'
+                mintedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: |
+                        链上 confirmed 时间（来自 `certificate_jobs.confirmed_at`）；
+                        status 还没到 `confirmed` 时为 null。
+                chainId:
+                    type: integer
+                    format: int64
+                    description: 链 ID（与 `certificates.chain_id` 一致；Sepolia = 11155111）
+                tokenId:
+                    type: string
+                    nullable: true
+                    description: |
+                        ERC721 tokenId（decimal string，confirmed 后由链上事件回填）；
+                        status 还没到 `confirmed` 时为 null。
+                contractAddress:
+                    type: string
+                    pattern: '^0x[a-fA-F0-9]{40}$'
+                    description: CertificateNFT 部署地址（来自 chain registry）
+                metadataUri:
+                    type: string
+                    format: uri
+                recipientWallet:
+                    type: string
+                    pattern: '^0x[a-fA-F0-9]{40}$'
+        CertificateListResponse:
+            type: object
+            required: [items]
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CertificateSummary'

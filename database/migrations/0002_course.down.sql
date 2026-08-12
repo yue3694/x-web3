@@ -1,0 +1,11 @@
+BEGIN;
+DROP TABLE IF EXISTS course_audit_logs;
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS course_category_map;
+DROP TABLE IF EXISTS lessons;
+DROP TABLE IF EXISTS chapters;
+DROP TABLE IF EXISTS media_assets;
+DROP TABLE IF EXISTS course_versions;
+DROP TABLE IF EXISTS courses;
+DROP TABLE IF EXISTS course_categories;
+COMMIT;

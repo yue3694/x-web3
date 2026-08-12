@@ -11,6 +11,7 @@
 **/.turbo/
 **/.vite/
 **/.cache/
+.deploy/
 
 # ---------- Debug / TS build info ----------
 *.dbg.json
@@ -45,8 +46,22 @@ pnpm-debug.log*
 coverage/
 *.lcov
 
+# ---------- Playwright ----------
+apps/web/playwright-report/
+apps/web/test-results/
+apps/web/blob-report/
+apps/web/playwright/.cache/
+
 # ---------- Node ----------
 node_modules/
 .pnpm-store/
+
+# ---------- Go ----------
+**/*.test
+**/*.out
+apps/api/.env
+apps/api/server
+apps/worker/.env
+apps/worker/worker
 
 .feishu-*

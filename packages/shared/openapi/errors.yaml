@@ -1,0 +1,132 @@
+openapi: 3.0.3
+info:
+    title: x-web3 University — Shared Error Schema
+    version: 0.1.0
+    description: |
+        跨模块复用的错误响应 schema。
+        与 `apps/api/internal/errcode/codes.go` 的 Code 枚举保持一致；
+        新增 errcode 时必须同步两端，避免 drift。
+components:
+    schemas:
+        ErrorCode:
+            type: string
+            description: |
+                业务错误码。值与 `apps/api/internal/errcode/codes.go` 的 Code 枚举一一对应。
+                前端按 errcode 做语义化提示，HTTP 状态码仅用于路由判断。
+            enum:
+                - BAD_REQUEST
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - INTERNAL
+                - RATE_LIMITED
+                - INVALID_PRIVY_TOKEN
+                - PRIVY_TOKEN_EXPIRED
+                - SESSION_EXPIRED
+                - WALLET_ALREADY_BOUND
+                - WALLET_SIGNATURE_INVALID
+                - WALLET_NONCE_REUSED
+                - CANNOT_UNBIND_LAST_WALLET
+                - ROLE_CHANGE_REQUIRES_CONFIRM
+                - COURSE_STATE_CONFLICT
+                - STALE_VERSION
+                - NOT_ENROLLED
+                - COMMENT_NOT_PURCHASED
+                - MEDIA_CHECKSUM_MISMATCH
+                - MEDIA_NOT_READY
+                - INTENT_EXPIRED
+                - PRICE_VERSION_MISMATCH
+                - INVALID_TX_RECEIPT
+                - ALREADY_PURCHASED
+                - EVENT_REORGED
+                - RPC_UNAVAILABLE
+                - WRONG_CHAIN
+                - INSUFFICIENT_ALLOWANCE
+                - PROGRESS_REGRESSION
+                - ALREADY_COMPLETED
+                - CERTIFICATE_DUPLICATE
+                - MINT_NOT_AUTHORIZED
+                - MINT_FAILED
+                - CONFIRM_TOKEN_INVALID
+                - CHAIN_REPLAY_OUT_OF_RANGE
+        ErrorResponse:
+            type: object
+            description: |
+                统一错误响应 envelope。
+                与 `apps/api/internal/httpkit.Error` 的 JSON 形状保持一致。
+            required: [error]
+            properties:
+                error:
+                    type: object
+                    required: [code, message, requestId]
+                    properties:
+                        code:
+                            $ref: '#/components/schemas/ErrorCode'
+                        message:
+                            type: string
+                            description: 面向开发者、可读的英文描述；前端按 code 本地化。
+                        requestId:
+                            type: string
+                            description: 服务端 correlation id；用于排障时串联日志。
+                        details:
+                            type: object
+                            description: |
+                                可选上下文（field-level 错误、参数约束等）。
+                                允许任意键值，便于扩展而不破坏契约。
+                            additionalProperties: true
+    responses:
+        BadRequest:
+            description: 请求参数错误（缺字段、格式非法等）
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Unauthorized:
+            description: 未登录或 session 失效
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Forbidden:
+            description: 已登录但无权访问
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        NotFound:
+            description: 资源不存在
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Conflict:
+            description: 状态冲突（幂等命中、乐观锁失败、状态机非法跃迁等）
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Gone:
+            description: 资源已过期（如购买意图 TTL 失效）
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Unprocessable:
+            description: 请求合法但语义不通过（如签名校验失败、checksum mismatch）
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        TooManyRequests:
+            description: 触发限流
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Internal:
+            description: 未预期的服务端错误
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'

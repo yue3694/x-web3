@@ -1,0 +1,22 @@
+{
+  "name": "@x-web3/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared OpenAPI contracts, error codes, event schemas, and chain registry between web/api/worker",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./openapi": "./src/openapi/index.ts",
+    "./errors": "./src/errors/index.ts",
+    "./events": "./src/events/index.ts",
+    "./chains": "./src/chains/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

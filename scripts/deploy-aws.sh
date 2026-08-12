@@ -15,6 +15,7 @@ AWS_REGION="${AWS_REGION:-us-east-1}"
 DOMAIN_NAME="${DOMAIN_NAME:-}"
 ACM_CERTIFICATE_ARN="${ACM_CERTIFICATE_ARN:-}"
 PRICE_CLASS="${PRICE_CLASS:-PriceClass_100}"
+API_ORIGIN_DOMAIN="${API_ORIGIN_DOMAIN:-}"
 
 template_file="${repo_dir}/infra/aws/static-site.yaml"
 
@@ -27,6 +28,7 @@ parameters=(
   "DomainName=${DOMAIN_NAME}"
   "AcmCertificateArn=${ACM_CERTIFICATE_ARN}"
   "PriceClass=${PRICE_CLASS}"
+  "ApiOriginDomain=${API_ORIGIN_DOMAIN}"
 )
 
 aws cloudformation deploy \
@@ -48,6 +50,7 @@ aws s3 sync apps/web/dist "s3://${bucket_name}" \
   --region "${AWS_REGION}" \
   --delete \
   --exclude "index.html" \
+  --exclude "backend/*" \
   --cache-control "public,max-age=31536000,immutable"
 
 aws s3 cp apps/web/dist/index.html "s3://${bucket_name}/index.html" \
