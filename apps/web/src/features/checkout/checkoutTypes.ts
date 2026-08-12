@@ -24,7 +24,8 @@ export interface CheckoutContextProps {
      *  实际链上金额以 intent.amount（API 锁定）为准。 */
     priceYD: string;
     /** 链上课程键（bytes32 hex，0x 开头，64 字符）。 */
-    courseKey: `0x${string}`;
+    /** API 当前按 OpenAPI 返回不带 0x 的 64 位 hex；兼容带前缀形式。 */
+    courseKey: string;
     /** 收款地址。当前 buyCourse 合约签名不再需要 recipient（金额由
      *  course_prices.amount + intent.amount 锁定），字段保留为可选，
      *  老 caller 不报错。 */

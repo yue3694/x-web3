@@ -28,7 +28,7 @@ import {marketAbi} from "@/contracts/market.abi";
 import {courseMarketDeployments} from "@/contracts/deployments";
 import {useNotify} from "@/components/NotifyProvider";
 
-import {uuidToBytes16} from "./derive";
+import {normalizeCourseKey, uuidToBytes16} from "./derive";
 import {buttonLabel, isUserRejected, normalizeError} from "./checkoutUtils";
 import type {CheckoutContextProps, CheckoutState, OrderTransactionAck, PurchaseIntent} from "./checkoutTypes";
 
@@ -138,7 +138,8 @@ export function CheckoutButton({
             if (fresh.chainId !== TARGET_CHAIN_ID) {
                 throw new Error(`Intent chain ${fresh.chainId} does not match ${TARGET_CHAIN_ID}`);
             }
-            if (fresh.courseKey.toLowerCase() !== courseKey.toLowerCase()) {
+            const intentCourseKey = normalizeCourseKey(fresh.courseKey);
+            if (intentCourseKey !== normalizeCourseKey(courseKey)) {
                 throw new Error("Intent courseKey does not match the selected course");
             }
             if (getAddress(fresh.marketAddress) !== getAddress(marketAddress)) {
@@ -189,7 +190,7 @@ export function CheckoutButton({
                 address: marketAddress,
                 abi: marketAbi,
                 functionName: "buyCourse",
-                args: [courseKey, expectedAmount, intentIdBytes16],
+                args: [intentCourseKey, expectedAmount, intentIdBytes16],
                 chainId: TARGET_CHAIN_ID,
             });
             setTxHash(hash);

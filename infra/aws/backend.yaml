@@ -21,6 +21,40 @@ Parameters:
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
 
 Resources:
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ["https://university.inxyu.cn"]
+            AllowedMethods: [GET, PUT, HEAD]
+            AllowedHeaders: ["*"]
+            ExposedHeaders: [ETag]
+            MaxAge: 3600
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+
+  PublicCertificateMetadataPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MediaBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicCertificateMetadata
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${MediaBucket.Arn}/certificate-metadata/*"
+
   BackendSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -29,7 +63,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: 0.0.0.0/0
+          SourcePrefixListId: pl-3b927c52 # AWS-managed CloudFront origin-facing network
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-backend"
@@ -56,6 +90,9 @@ Resources:
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource: !Ref RuntimeSecretArn
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject]
+                Resource: !Sub "${MediaBucket.Arn}/*"
 
   BackendProfile:
     Type: AWS::IAM::InstanceProfile
@@ -95,6 +132,9 @@ Resources:
           chmod 0755 /opt/x-web3/api /opt/x-web3/worker
           tar -xzf /tmp/migrations.tar.gz -C /opt/x-web3/migrations
           aws secretsmanager get-secret-value --secret-id '${RuntimeSecretArn}' --query SecretString --output text > /opt/x-web3/runtime.json
+          jq --arg bucket '${MediaBucket}' --arg region '${AWS::Region}' \
+            '. + {OBJECT_STORE_BUCKET:$bucket,AWS_REGION:$region}' /opt/x-web3/runtime.json > /opt/x-web3/runtime.with-store.json
+          mv /opt/x-web3/runtime.with-store.json /opt/x-web3/runtime.json
           chmod 0600 /opt/x-web3/runtime.json
           jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' /opt/x-web3/runtime.json > /opt/x-web3/app.env
           chmod 0600 /opt/x-web3/app.env
@@ -151,6 +191,8 @@ Resources:
           /opt/aws/bin/cfn-signal --success true --stack '${AWS::StackName}' --resource BackendInstance --region '${AWS::Region}'
 
 Outputs:
+  MediaBucketName:
+    Value: !Ref MediaBucket
   ApiOriginDomain:
     Description: Public DNS consumed only as the CloudFront custom origin.
     Value: !GetAtt BackendInstance.PublicDnsName

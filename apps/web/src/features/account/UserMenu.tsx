@@ -6,11 +6,14 @@
  */
 
 import {useEffect, useRef, useState} from "react";
-import {useDisconnect} from "wagmi";
+import {formatUnits, type Address} from "viem";
+import {useDisconnect, useReadContract} from "wagmi";
 
 import {useSession} from "@/auth/SessionContext";
 import {authApi} from "@/api/types";
 import {useNotify} from "@/components/NotifyProvider";
+import {erc20Abi} from "@/contracts/erc20.abi";
+import {ydTokenDeployments} from "@/contracts/deployments";
 
 interface UserMenuProps {
     /** 触发按钮的 aria-label */
@@ -18,7 +21,8 @@ interface UserMenuProps {
     wallet: {
         connected: boolean;
         connecting: boolean;
-        address?: string;
+        address?: Address;
+        displayAddress?: string;
         network: string;
         wrongChain: boolean;
         manage: () => void;
@@ -34,6 +38,18 @@ export function UserMenu({label = "打开账户菜单", wallet}: UserMenuProps) 
     const [savingName, setSavingName] = useState(false);
     const {notify} = useNotify();
     const rootRef = useRef<HTMLDivElement | null>(null);
+    const ydAddress = ydTokenDeployments.target.address;
+    const ydBalance = useReadContract({
+        address: ydAddress,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: wallet.address ? [wallet.address] : undefined,
+        chainId: ydTokenDeployments.target.chainId,
+        query: {
+            enabled: Boolean(wallet.connected && wallet.address && ydAddress),
+            refetchInterval: 12_000,
+        },
+    });
 
     // 点击外部或 Esc 关闭。
     useEffect(() => {
@@ -52,6 +68,10 @@ export function UserMenu({label = "打开账户菜单", wallet}: UserMenuProps) 
         };
     }, [open]);
 
+    useEffect(() => {
+        if (open && wallet.connected && wallet.address) void ydBalance.refetch();
+    }, [open, wallet.connected, wallet.address]);
+
     if (!profile) return null;
 
     const onLogout = async () => {
@@ -63,6 +83,7 @@ export function UserMenu({label = "打开账户菜单", wallet}: UserMenuProps) 
     const initial = (profile.displayName?.[0] ?? "?").toUpperCase();
     const isSuper = hasRole("super_admin");
     const walletStatus = wallet.connecting ? "连接中…" : wallet.connected ? wallet.network : "钱包未连接";
+    const ydAmount = ydBalance.data === undefined ? "—" : formatYDBalance(ydBalance.data);
 
     const manageWallet = () => {
         setOpen(false);
@@ -100,7 +121,7 @@ export function UserMenu({label = "打开账户菜单", wallet}: UserMenuProps) 
                     <span className="user-menu__wallet-summary">
                         <span className="wallet-chip__dot" aria-hidden="true" />
                         <span className="wallet-chip__net">{walletStatus}</span>
-                        {wallet.connected && wallet.address ? <span className="wallet-chip__addr">{wallet.address}</span> : null}
+                        {wallet.connected && wallet.address ? <span className="wallet-chip__addr">{wallet.displayAddress ?? wallet.address}</span> : null}
                     </span>
                 </span>
                 <span className="user-menu__caret" aria-hidden="true">▾</span>
@@ -134,11 +155,15 @@ export function UserMenu({label = "打开账户菜单", wallet}: UserMenuProps) 
 
                     <section className="user-menu__section">
                         <h3>钱包</h3>
+                        <div className="user-menu__token-balance" aria-label="YD 余额">
+                            <span><small>YD 余额</small><strong>{ydAmount} YD</strong></span>
+                            <span className="user-menu__token-mark" aria-hidden="true">YD</span>
+                        </div>
                         <button type="button" className="user-menu__wallet-action" onClick={manageWallet}>
                             <span className="wallet-chip__dot" aria-hidden="true" />
                             <span>
                                 <strong>{walletStatus}</strong>
-                                <small>{wallet.connected ? wallet.address : "连接钱包以继续链上操作"}</small>
+                                <small>{wallet.connected ? (wallet.displayAddress ?? wallet.address) : "连接钱包以继续链上操作"}</small>
                             </span>
                             <span aria-hidden="true">→</span>
                         </button>
@@ -153,4 +178,11 @@ export function UserMenu({label = "打开账户菜单", wallet}: UserMenuProps) 
             ) : null}
         </div>
     );
+}
+
+function formatYDBalance(value: bigint): string {
+    const raw = formatUnits(value, 18);
+    const [whole, fraction = ""] = raw.split(".");
+    const visibleFraction = fraction.slice(0, 4).replace(/0+$/, "");
+    return visibleFraction ? `${whole}.${visibleFraction}` : whole;
 }

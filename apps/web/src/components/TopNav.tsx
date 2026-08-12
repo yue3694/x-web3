@@ -35,7 +35,8 @@ function AccountActions() {
                             wallet={{
                                 connected: isConnected,
                                 connecting: isConnecting,
-                                address: truncatedAddress ?? address,
+                                address,
+                                displayAddress: truncatedAddress ?? address,
                                 network: chain?.name ?? "未识别",
                                 wrongChain,
                                 manage: () => show?.(),

@@ -11,6 +11,7 @@ func setValidBaseEnv(t *testing.T) {
 	t.Setenv("PRIVY_JWKS_URL", "https://example.test/jwks.json")
 	t.Setenv("PRIVY_DEV_STUB", "")
 	t.Setenv("PRIVY_DEV_STUB_SUBJECT", "")
+	t.Setenv("OBJECT_STORE_BUCKET", "test-media")
 }
 
 func TestLoadRejectsDevStubOutsideDevelopment(t *testing.T) {

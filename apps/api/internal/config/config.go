@@ -49,6 +49,8 @@ type Config struct {
 	ChainID             int64  // 业务链；本地 Anvil=31337，Sepolia=11155111
 	YDTokenAddress      string
 	CourseMarketAddress string
+	ObjectStoreBucket   string
+	AWSRegion           string
 
 	// Logging
 	LogLevel string
@@ -85,6 +87,8 @@ func Load() (*Config, error) {
 		ChainID:             getEnvInt64("CHAIN_ID", 11_155_111),
 		YDTokenAddress:      os.Getenv("YD_TOKEN_ADDRESS"),
 		CourseMarketAddress: os.Getenv("COURSE_MARKET_ADDRESS"),
+		ObjectStoreBucket:   os.Getenv("OBJECT_STORE_BUCKET"),
+		AWSRegion:           getEnv("AWS_REGION", "us-east-1"),
 		LoginRateLimit:      getEnvInt("LOGIN_RATE_LIMIT_PER_MINUTE", 10),
 		WalletRateLimit:     getEnvInt("WALLET_RATE_LIMIT_PER_MINUTE", 5),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
@@ -108,6 +112,9 @@ func Load() (*Config, error) {
 	}
 	if c.IsProd() && !c.CookieSecure {
 		errs = append(errs, "SESSION_COOKIE_SECURE must be enabled in production")
+	}
+	if c.IsProd() && c.ObjectStoreBucket == "" {
+		errs = append(errs, "OBJECT_STORE_BUCKET is required in production")
 	}
 	if c.PrivyDevStub {
 		if c.PrivyDevSubject == "" {

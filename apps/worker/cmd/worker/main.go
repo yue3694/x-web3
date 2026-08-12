@@ -108,18 +108,23 @@ func main() {
 	// scanner 不是 goroutine 暴露 runner 内部 metrics 的通道，metrics 包
 	// 通过 ReconcileSnapFunc 反向拉取；这里用一个 ctx-driven 协程每轮 ScanOnce
 	// 后调 metrics.SetReconcileSnapshot 推一次。
-	scanner, err := reconcile.NewScanner(reconcile.Config{
-		Pool:         pool,
-		Writer:       reconcile.NewWriter(reconcile.NewPGDLQStore(pool), logger),
-		Logger:       logger,
-		Consumer:     consumer,
-		ChainID:      chainID,
-		ConfirmDepth: confirmDepth,
-		Interval:     time.Duration(envInt64("RECONCILE_INTERVAL_MINUTES", 30)) * time.Minute,
-	})
+	var scanner *reconcile.Scanner
+	if os.Getenv("RECONCILE_ENABLED") == "0" {
+		logger.Info("reconcile_disabled")
+	} else {
+		scanner, err = reconcile.NewScanner(reconcile.Config{
+			Pool:         pool,
+			Writer:       reconcile.NewWriter(reconcile.NewPGDLQStore(pool), logger),
+			Logger:       logger,
+			Consumer:     consumer,
+			ChainID:      chainID,
+			ConfirmDepth: confirmDepth,
+			Interval:     time.Duration(envInt64("RECONCILE_INTERVAL_MINUTES", 30)) * time.Minute,
+		})
+	}
 	if err != nil {
 		logger.Warn("reconcile_init_failed", "err", err.Error())
-	} else {
+	} else if scanner != nil {
 		go func() {
 			// 启动即跑一次，与 scanner.Start 行为一致；这里改用手动循环
 			// 以便在每一轮 ScanOnce 后把 snapshot 推到 metrics 包。

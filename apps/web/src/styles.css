@@ -1613,6 +1613,34 @@ button.danger:hover:not(:disabled) {
     color: var(--fg-muted);
 }
 
+.user-menu__token-balance {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.65rem;
+    padding: 0.8rem 0.85rem;
+    border: 1px solid rgba(52, 211, 153, 0.2);
+    border-radius: 12px;
+    background: rgba(52, 211, 153, 0.07);
+}
+
+.user-menu__token-balance > span:first-child { display: grid; gap: 0.2rem; }
+.user-menu__token-balance small { color: var(--fg-muted); font-size: 0.68rem; }
+.user-menu__token-balance strong { color: var(--accent-mint); font-family: var(--font-mono); font-size: 1rem; }
+.user-menu__token-mark {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--accent-mint);
+    color: #07130f;
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+
 .user-menu__wallet-action {
     width: 100%;
     display: grid;

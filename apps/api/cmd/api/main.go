@@ -106,8 +106,16 @@ func main() {
 	mediaRepo := media.NewRepo(pool)
 	commentRepo := comment.NewRepo(pool)
 
-	// Object store：MVP 用 dev fake；F07 替换为 AWS S3。
-	objStore := objectstore.NewFakeStore()
+	// 生产使用 S3；开发和测试继续使用内存 fake，避免本地依赖 AWS。
+	var objStore objectstore.Store
+	if cfg.IsProd() {
+		objStore, err = objectstore.NewS3Store(ctx, cfg.AWSRegion, cfg.ObjectStoreBucket)
+		if err != nil {
+			logger.Fatal("object_store_init", zap.Error(err))
+		}
+	} else {
+		objStore = objectstore.NewFakeStore()
+	}
 
 	learningSvc := learning.NewService(pool, objStore)
 	orderSvc := order.NewService(pool, cfg.PurchaseIntentTTL)

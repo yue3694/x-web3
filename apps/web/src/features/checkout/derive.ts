@@ -18,6 +18,16 @@
  */
 
 const HEX_32 = /^[0-9a-fA-F]{32}$/;
+const HEX_64 = /^[0-9a-fA-F]{64}$/;
+
+/** API 使用无 0x 的 64 位 hex，viem 使用 0x-prefixed bytes32；统一为后者。 */
+export function normalizeCourseKey(value: string): `0x${string}` {
+    const hex = value.startsWith("0x") ? value.slice(2) : value;
+    if (!HEX_64.test(hex)) {
+        throw new Error("Invalid courseKey returned by the purchase intent");
+    }
+    return (`0x${hex.toLowerCase()}`) as `0x${string}`;
+}
 
 /**
  * 计算课程的链上 key：sha256(uuid_bytes) → 32 字节 hex（带 0x）。

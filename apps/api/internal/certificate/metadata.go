@@ -31,14 +31,14 @@ import (
 
 // Sentinel errors 走 errors.New + %w 风格，调用方用 errors.Is 分类到 HTTP code。
 var (
-	ErrInvalidURI        = errors.New("certificate: invalid metadata URI scheme")
-	ErrMetadataTooLarge  = errors.New("certificate: metadata JSON exceeds size limit")
-	ErrEmptyRecipient    = errors.New("certificate: recipient wallet is empty")
-	ErrEmptyCourseID     = errors.New("certificate: course id is empty")
-	ErrEmptyName         = errors.New("certificate: name is empty")
-	ErrEmptyDescription  = errors.New("certificate: description is empty")
-	ErrEmptyImage        = errors.New("certificate: image URL is empty")
-	ErrInvalidImage      = errors.New("certificate: image must be ipfs:// or https://")
+	ErrInvalidURI       = errors.New("certificate: invalid metadata URI scheme")
+	ErrMetadataTooLarge = errors.New("certificate: metadata JSON exceeds size limit")
+	ErrEmptyRecipient   = errors.New("certificate: recipient wallet is empty")
+	ErrEmptyCourseID    = errors.New("certificate: course id is empty")
+	ErrEmptyName        = errors.New("certificate: name is empty")
+	ErrEmptyDescription = errors.New("certificate: description is empty")
+	ErrEmptyImage       = errors.New("certificate: image URL is empty")
+	ErrInvalidImage     = errors.New("certificate: image must be ipfs:// or https://")
 )
 
 // metadataJSON 单文件不超过 64 KiB；OpenSea 自身不强制但是合理上限。
@@ -54,24 +54,24 @@ var allowedSchemes = map[string]struct{}{
 // CourseMeta 调用方传入的「课程完课时所需的展示信息」。
 // 字段为空时会被校验拒掉（除 Attributes 之外都必填）。
 type CourseMeta struct {
-	Name           string // 证书标题
-	Description    string // 长描述（markdown 一段）
-	ImageURI       string // badge 图片 URL (ipfs:// or https://)
-	CourseID       uuid.UUID
-	CourseVersion  int
-	CompletionDate time.Time
+	Name            string // 证书标题
+	Description     string // 长描述（markdown 一段）
+	ImageURI        string // badge 图片 URL (ipfs:// or https://)
+	CourseID        uuid.UUID
+	CourseVersion   int
+	CompletionDate  time.Time
 	RecipientWallet common.Address // 链上接收方
-	IssuerName     string          // 可选：发证主体 (e.g. "x-web3 University")
-	ExternalURL    string          // 可选：证书详情页
+	IssuerName      string         // 可选：发证主体 (e.g. "x-web3 University")
+	ExternalURL     string         // 可选：证书详情页
 }
 
 // Metadata JSON 顶层结构 (OpenSea 兼容)。
 type Metadata struct {
-	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	Image       string       `json:"image"`
-	ExternalURL string       `json:"external_url,omitempty"`
-	Attributes  []Attribute  `json:"attributes"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Image       string      `json:"image"`
+	ExternalURL string      `json:"external_url,omitempty"`
+	Attributes  []Attribute `json:"attributes"`
 }
 
 // Attribute 是 OpenSea 标准 trait。
@@ -91,12 +91,13 @@ type UploadResult struct {
 // Store 是上传所需的最小接口；与 objectstore.ObjectStore 完全一致 (PresignPut)。
 // 这里独立导出是为单测注入 fake：FakeStore 已实现 PresignPut，所以可以直接传。
 type Store interface {
-	PresignPut(ctx context.Context, key, contentType string, size int64) (url string, expiresAt time.Time, err error)
+	PutBytes(ctx context.Context, key, contentType string, body []byte) error
+	PublicURL(key string) string
 }
 
 // Generator 持有不可变的元数据装配配置。
 type Generator struct {
-	store    Store
+	store     Store
 	keyPrefix string // s3 key 前缀；默认 "certificate-metadata/"
 }
 
@@ -143,15 +144,10 @@ func (g *Generator) GenerateAndUpload(
 
 	key := fmt.Sprintf("%s%s.json", g.keyPrefix, hashHex)
 
-	uploadURL, _, err := g.store.PresignPut(ctx, key, "application/json", int64(len(jsonBytes)))
-	if err != nil {
-		return UploadResult{}, fmt.Errorf("presign put: %w", err)
+	if err := g.store.PutBytes(ctx, key, "application/json", jsonBytes); err != nil {
+		return UploadResult{}, fmt.Errorf("put metadata: %w", err)
 	}
-
-	uri, err := canonicalURI(uploadURL, key)
-	if err != nil {
-		return UploadResult{}, err
-	}
+	uri := g.store.PublicURL(key)
 
 	return UploadResult{
 		URI:       uri,

@@ -2,23 +2,32 @@
 //
 // 接口只暴露最小集：PresignPut / PresignGet / Head。
 //
-// 当前提供：
-//   - FakeStore：纯本地实现，给 dev / 测试 / CI 用，不依赖 AWS SDK。
-//   - （生产）S3Store：AWS SDK v2 实现，TODO（F07 时落）。
+// 当前提供 FakeStore（dev/test）与 S3Store（production）。
 package objectstore
 
 import (
 	"context"
-	"errors"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
 	"sync"
 	"time"
 )
+
+// Store 是 API 各业务模块使用的完整对象存储能力。
+type Store interface {
+	PresignPut(ctx context.Context, key, contentType string, size int64) (string, time.Time, error)
+	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, time.Time, error)
+	Head(ctx context.Context, key string) (int64, error)
+	PutBytes(ctx context.Context, key, contentType string, body []byte) error
+	PublicURL(key string) string
+	Region() string
+	Bucket() string
+}
 
 // FakeStore 内存版对象存储：模拟 PUT/HEAD；presigned URL 形式合法但指向
 // 本地端点（默认 "https://fake-s3.localhost"）。生产请替换为 S3Store。
@@ -60,6 +69,15 @@ func (s *FakeStore) Put(key, contentType string, size int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.objects[key] = fakeObject{contentType: contentType, size: size}
+}
+
+func (s *FakeStore) PutBytes(_ context.Context, key, contentType string, body []byte) error {
+	s.Put(key, contentType, int64(len(body)))
+	return nil
+}
+
+func (s *FakeStore) PublicURL(key string) string {
+	return fmt.Sprintf("%s/%s/%s", s.host, s.bucket, key)
 }
 
 // PresignPut 生成 AWS SigV4 风格的伪签名 URL；请求到 fake host 时 Head 会成功。
