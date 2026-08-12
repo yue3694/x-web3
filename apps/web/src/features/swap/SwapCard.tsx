@@ -8,6 +8,10 @@
  * 本组件只做编排：合并两条链路的状态、跑提交前校验（连接 / 链 / 滑点 ≤10% /
  * 价格影响 <10%，见 F05-T06）、把表单值喂给两个 hook。完整流程见 README。
  *
+ * 布局：左右两列（移动端单列堆叠）
+ *   左  ─ 主表单 + 错误 + 提交（视觉重点）
+ *   右  ─ 滑点 / 截止 / 报价 / 路径 / Gas / 成交对比
+ *
  * 注意：绝不在 useEffect 里发交易；只有点击按钮才触发。
  */
 
@@ -113,86 +117,121 @@ export function SwapCard({defaultTokenIn = "YD", onSuccess}: SwapCardProps) {
     });
   };
 
-  // 三类错误共用一条 banner 通道，按严重程度从配置问题到交易失败排列。
-  const notices = [
-    notDeployed ? `${TARGET_CHAIN_NAME} 上尚未配置兑换路由 / 代币地址。` : null,
+  // 把「配置缺失」从错误里抽出来单独渲染：不是交易失败，而是功能状态。
+  // 当用户在错链时，给出切链 CTA；其他情况只展示一行说明即可。
+  const runningErrors = [
     quoteError ? `报价失败：${quoteError.message}` : null,
     execute.error,
   ].filter((n): n is string => n !== null);
 
   return (
     <section className="swap-card panel" aria-labelledby="swap-card-title">
-      <header className="section-heading">
-        <div>
+      <header className="swap-card__header">
+        <div className="swap-card__heading">
           <span className="eyebrow">兑换</span>
           <h2 id="swap-card-title">
             {tokenIn} → {tokenOut}
           </h2>
-          <p>Uniswap V3 · {DEFAULT_FEE_TIER / 10_000}% 池子 · {TARGET_CHAIN_NAME}</p>
         </div>
+        <p className="swap-card__protocol">
+          Uniswap V3 · {DEFAULT_FEE_TIER / 10_000}% 池 · {TARGET_CHAIN_NAME}
+        </p>
       </header>
 
-      <SwapAmountFields
-        tokenIn={tokenIn}
-        outMeta={outMeta}
-        amountText={amountText}
-        amountIn={amountIn}
-        quote={quote}
-        quoting={quoting}
-        disabled={busy}
-        onAmountChange={setAmountText}
-        onFlip={onFlip}
-      />
+      <div className="swap-card__grid">
+        {/* 左列：主表单 + 错误 + 提交（视觉重点） */}
+        <div className="swap-card__main">
+          <SwapAmountFields
+            tokenIn={tokenIn}
+            outMeta={outMeta}
+            amountText={amountText}
+            amountIn={amountIn}
+            quote={quote}
+            quoting={quoting}
+            disabled={busy}
+            onAmountChange={setAmountText}
+            onFlip={onFlip}
+          />
 
-      <SwapSummary
-        quote={quote}
-        quoting={quoting}
-        outMeta={outMeta}
-        settlement={execute.settlement}
-      />
+          {notDeployed ? (
+            <div className="swap-card__notice" role="status">
+              <strong className="swap-card__notice-title">兑换暂不可用</strong>
+              <p className="swap-card__notice-body">
+                当前网络（{TARGET_CHAIN_NAME}）尚未配置兑换路由或代币地址。请切换到已部署兑换合约的网络，或在 <code>.env</code> 中补齐
+                <code> VITE_SWAP_ROUTER_ADDRESS</code> / <code>VITE_QUOTER_ADDRESS</code> / <code>VITE_USDC_ADDRESS</code>。
+              </p>
+              {chainId !== TARGET_CHAIN_ID ? (
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => switchChain({chainId: TARGET_CHAIN_ID})}
+                  disabled={isSwitching}
+                >
+                  {isSwitching ? "切换中…" : `切换到 ${TARGET_CHAIN_NAME}`}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
-      <SlippageControl valueBps={slippageBps} onChange={setSlippageBps} disabled={busy} />
+          {runningErrors.length > 0 ? (
+            <div className="swap-card__notices" role="region" aria-label="兑换提示">
+              {runningErrors.map((notice) => (
+                <p key={notice} className="notice notice--error" role="alert">
+                  {notice}
+                </p>
+              ))}
+            </div>
+          ) : null}
 
-      <label className="swap-card__deadline">
-        <span>交易截止时间（分钟）</span>
-        <input
-          type="number"
-          min={MIN_DEADLINE_MINS}
-          max={MAX_DEADLINE_MINS}
-          value={deadlineMins}
-          onChange={(e) => setDeadlineMins(Number(e.target.value) || DEFAULT_DEADLINE_MINS)}
-          disabled={busy}
-        />
-      </label>
+          <SwapSubmitButton
+            state={state}
+            tokenIn={tokenIn}
+            tokenOut={tokenOut}
+            isConnected={isConnected}
+            onWrongChain={onWrongChain}
+            isSwitching={isSwitching}
+            impactBlocked={impactBlocked}
+            slippageBlocked={slippageBlocked}
+            notDeployed={notDeployed}
+            disabled={
+              !isConnected ||
+              notDeployed ||
+              busy ||
+              !amountIn ||
+              !quote ||
+              quoting ||
+              slippageBlocked ||
+              impactBlocked
+            }
+            onSwap={onSwap}
+            onSwitchChain={() => switchChain({chainId: TARGET_CHAIN_ID})}
+          />
+        </div>
 
-      {notices.map((notice) => (
-        <p key={notice} className="notice notice--error" role="alert">
-          {notice}
-        </p>
-      ))}
+        {/* 右列：滑点 / 截止 / 报价详情 / 成交对比 */}
+        <aside className="swap-card__aside" aria-label="兑换设置与报价">
+          <SlippageControl valueBps={slippageBps} onChange={setSlippageBps} disabled={busy} />
 
-      <SwapSubmitButton
-        state={state}
-        tokenIn={tokenIn}
-        tokenOut={tokenOut}
-        isConnected={isConnected}
-        onWrongChain={onWrongChain}
-        isSwitching={isSwitching}
-        impactBlocked={impactBlocked}
-        slippageBlocked={slippageBlocked}
-        disabled={
-          !isConnected ||
-          notDeployed ||
-          busy ||
-          !amountIn ||
-          !quote ||
-          quoting ||
-          slippageBlocked ||
-          impactBlocked
-        }
-        onSwap={onSwap}
-        onSwitchChain={() => switchChain({chainId: TARGET_CHAIN_ID})}
-      />
+          <label className="swap-card__deadline">
+            <span>交易截止时间（分钟）</span>
+            <input
+              type="number"
+              min={MIN_DEADLINE_MINS}
+              max={MAX_DEADLINE_MINS}
+              value={deadlineMins}
+              onChange={(e) => setDeadlineMins(Number(e.target.value) || DEFAULT_DEADLINE_MINS)}
+              disabled={busy}
+            />
+          </label>
+
+          <SwapSummary
+            quote={quote}
+            quoting={quoting}
+            outMeta={outMeta}
+            settlement={execute.settlement}
+          />
+        </aside>
+      </div>
     </section>
   );
 }

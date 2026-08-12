@@ -156,6 +156,7 @@ const sensitiveBadgeStyle: CSSProperties = {
     borderRadius: "999px",
     font: "500 0.62rem/1 var(--font-mono)",
     textTransform: "uppercase",
+    textWrap: "nowrap",
 };
 
 export function AdminLayout() {

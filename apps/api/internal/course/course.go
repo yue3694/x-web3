@@ -33,9 +33,31 @@ type Course struct {
 	CurrentVersion int           `json:"currentVersion"`
 	PriceMinor     int64         `json:"priceMinor"`
 	Currency       string        `json:"currency"`
+	ChapterCount   int           `json:"chapterCount"`
+	LessonCount    int           `json:"lessonCount"`
+	DurationSecond int           `json:"durationSeconds"`
 	PublishedAt    *time.Time    `json:"publishedAt,omitempty"`
 	CreatedAt      time.Time     `json:"createdAt"`
 	UpdatedAt      time.Time     `json:"updatedAt"`
+}
+
+// 目录卡片要展示「N 章 · M 课时 · X 小时」，这些聚合值必须跟 current_version 对齐，
+// 因此统一走同一段 SELECT/FROM，避免五处查询各写一遍导致 Scan 顺序漂移。
+const courseSelectCols = `SELECT c.id,c.teacher_id,u.display_name,c.slug,c.title,v.description,c.status,c.current_version,c.price_minor,c.currency,
+agg.chapter_count,agg.lesson_count,agg.duration_seconds,c.published_at,c.created_at,c.updated_at`
+
+const courseFromClause = `FROM courses c JOIN users u ON u.id=c.teacher_id JOIN course_versions v ON v.course_id=c.id AND v.version=c.current_version
+LEFT JOIN LATERAL (
+    SELECT count(DISTINCT ch.id)::int AS chapter_count, count(l.id)::int AS lesson_count,
+           coalesce(sum(l.duration_seconds),0)::int AS duration_seconds
+    FROM chapters ch LEFT JOIN lessons l ON l.chapter_id=ch.id
+    WHERE ch.course_version_id=v.id
+) agg ON true`
+
+// scanCourse 读取 courseSelectCols 的固定列序。
+func scanCourse(row pgx.Row, c *Course) error {
+	return row.Scan(&c.ID, &c.TeacherID, &c.TeacherName, &c.Slug, &c.Title, &c.Description, &c.Status, &c.CurrentVersion,
+		&c.PriceMinor, &c.Currency, &c.ChapterCount, &c.LessonCount, &c.DurationSecond, &c.PublishedAt, &c.CreatedAt, &c.UpdatedAt)
 }
 
 type CreateInput struct {
@@ -269,8 +291,7 @@ VALUES($1,$2,$3,$4,$5,$6,$7)`, c.ID, c.CurrentVersion, settlement.ChainID, settl
 
 // ListPendingReview returns the admin publication queue.
 func (r *Repo) ListPendingReview(ctx context.Context) ([]Course, error) {
-	rows, err := r.pool.Query(ctx, `SELECT c.id,c.teacher_id,u.display_name,c.slug,c.title,v.description,c.status,c.current_version,c.price_minor,c.currency,c.published_at,c.created_at,c.updated_at
-FROM courses c JOIN users u ON u.id=c.teacher_id JOIN course_versions v ON v.course_id=c.id AND v.version=c.current_version
+	rows, err := r.pool.Query(ctx, courseSelectCols+"\n"+courseFromClause+`
 WHERE c.status='pending_review' AND c.deleted_at IS NULL ORDER BY c.updated_at ASC`)
 	if err != nil {
 		return nil, err
@@ -279,7 +300,7 @@ WHERE c.status='pending_review' AND c.deleted_at IS NULL ORDER BY c.updated_at A
 	out := make([]Course, 0)
 	for rows.Next() {
 		var c Course
-		if err := rows.Scan(&c.ID, &c.TeacherID, &c.TeacherName, &c.Slug, &c.Title, &c.Description, &c.Status, &c.CurrentVersion, &c.PriceMinor, &c.Currency, &c.PublishedAt, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		if err := scanCourse(rows, &c); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -290,8 +311,7 @@ WHERE c.status='pending_review' AND c.deleted_at IS NULL ORDER BY c.updated_at A
 // ListByTeacher returns all non-deleted courses so Studio can resume work after
 // a refresh or an admin rejection.
 func (r *Repo) ListByTeacher(ctx context.Context, teacherID uuid.UUID) ([]Course, error) {
-	rows, err := r.pool.Query(ctx, `SELECT c.id,c.teacher_id,u.display_name,c.slug,c.title,v.description,c.status,c.current_version,c.price_minor,c.currency,c.published_at,c.created_at,c.updated_at
-FROM courses c JOIN users u ON u.id=c.teacher_id JOIN course_versions v ON v.course_id=c.id AND v.version=c.current_version
+	rows, err := r.pool.Query(ctx, courseSelectCols+"\n"+courseFromClause+`
 WHERE c.teacher_id=$1 AND c.deleted_at IS NULL ORDER BY c.updated_at DESC`, teacherID)
 	if err != nil {
 		return nil, err
@@ -300,7 +320,7 @@ WHERE c.teacher_id=$1 AND c.deleted_at IS NULL ORDER BY c.updated_at DESC`, teac
 	out := make([]Course, 0)
 	for rows.Next() {
 		var c Course
-		if err := rows.Scan(&c.ID, &c.TeacherID, &c.TeacherName, &c.Slug, &c.Title, &c.Description, &c.Status, &c.CurrentVersion, &c.PriceMinor, &c.Currency, &c.PublishedAt, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		if err := scanCourse(rows, &c); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -310,9 +330,8 @@ WHERE c.teacher_id=$1 AND c.deleted_at IS NULL ORDER BY c.updated_at DESC`, teac
 
 func (r *Repo) GetPublished(ctx context.Context, id uuid.UUID) (*Course, error) {
 	var c Course
-	err := r.pool.QueryRow(ctx, `SELECT c.id,c.teacher_id,u.display_name,c.slug,c.title,v.description,c.status,c.current_version,c.price_minor,c.currency,c.published_at,c.created_at,c.updated_at
-FROM courses c JOIN users u ON u.id=c.teacher_id JOIN course_versions v ON v.course_id=c.id AND v.version=c.current_version
-WHERE c.id=$1 AND c.status='published' AND c.deleted_at IS NULL`, id).Scan(&c.ID, &c.TeacherID, &c.TeacherName, &c.Slug, &c.Title, &c.Description, &c.Status, &c.CurrentVersion, &c.PriceMinor, &c.Currency, &c.PublishedAt, &c.CreatedAt, &c.UpdatedAt)
+	err := scanCourse(r.pool.QueryRow(ctx, courseSelectCols+"\n"+courseFromClause+`
+WHERE c.id=$1 AND c.status='published' AND c.deleted_at IS NULL`, id), &c)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -323,8 +342,7 @@ func (r *Repo) ListPublished(ctx context.Context, f ListFilter) ([]Course, error
 	if f.Limit <= 0 || f.Limit > 50 {
 		f.Limit = 20
 	}
-	rows, err := r.pool.Query(ctx, `SELECT c.id,c.teacher_id,u.display_name,c.slug,c.title,v.description,c.status,c.current_version,c.price_minor,c.currency,c.published_at,c.created_at,c.updated_at
-FROM courses c JOIN users u ON u.id=c.teacher_id JOIN course_versions v ON v.course_id=c.id AND v.version=c.current_version
+	rows, err := r.pool.Query(ctx, courseSelectCols+"\n"+courseFromClause+`
 WHERE c.status='published' AND c.deleted_at IS NULL
 AND ($1='' OR c.title ILIKE '%'||$1||'%' OR v.description ILIKE '%'||$1||'%')
 AND ($2::uuid IS NULL OR c.teacher_id=$2) AND ($3::bigint IS NULL OR c.price_minor >= $3) AND ($4::bigint IS NULL OR c.price_minor <= $4)
@@ -337,7 +355,7 @@ ORDER BY c.published_at DESC,c.id DESC LIMIT $7`, strings.TrimSpace(f.Query), f.
 	out := make([]Course, 0, f.Limit)
 	for rows.Next() {
 		var c Course
-		if err := rows.Scan(&c.ID, &c.TeacherID, &c.TeacherName, &c.Slug, &c.Title, &c.Description, &c.Status, &c.CurrentVersion, &c.PriceMinor, &c.Currency, &c.PublishedAt, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		if err := scanCourse(rows, &c); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

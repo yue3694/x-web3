@@ -20,6 +20,8 @@ interface SwapSubmitButtonProps {
   impactBlocked: boolean;
   /** 滑点 > 10%。 */
   slippageBlocked: boolean;
+  /** 兑换路由 / 代币地址在目标链上缺失。 */
+  notDeployed?: boolean;
   disabled: boolean;
   onSwap: () => void;
   onSwitchChain: () => void;
@@ -44,6 +46,7 @@ function label(p: SwapSubmitButtonProps): string {
       return "重试兑换";
     case "idle":
       // 阻断原因优先于默认文案：用户要知道为什么按钮是灰的。
+      if (p.notDeployed) return "兑换尚未配置";
       if (p.impactBlocked) return "价格影响过高";
       if (p.slippageBlocked) return "滑点过高";
       return `用 ${p.tokenIn} 兑换 ${p.tokenOut}`;

@@ -3,87 +3,91 @@
  *
  * 纯受控展示：金额解析、报价都在 SwapCard 完成，这里只渲染。
  * MVP 只有 YD ↔ USDC 一对，所以选任一 token 都等价于翻转方向。
+ *
+ * 代币选择改用主题化 <Select />（替代原生 <select>），与项目深色视觉对齐。
  */
+
+import {Select, type SelectOption} from "@/components/Select";
 
 import {TOKEN_SYMBOLS} from "./swapConfig";
 import {formatTokenAmount} from "./swapUtils";
 import type {QuoteResult, TokenMeta, TokenSymbol} from "./swapTypes";
 
 interface SwapAmountFieldsProps {
-  tokenIn: TokenSymbol;
-  outMeta: TokenMeta;
-  amountText: string;
-  /** 解析后的金额；null 且输入非空 = 非法输入，输入框标红。 */
-  amountIn: bigint | null;
-  quote: QuoteResult | null;
-  quoting: boolean;
-  disabled: boolean;
-  onAmountChange: (raw: string) => void;
-  onFlip: () => void;
+    tokenIn: TokenSymbol;
+    outMeta: TokenMeta;
+    amountText: string;
+    /** 解析后的金额；null 且输入非空 = 非法输入，输入框标红。 */
+    amountIn: bigint | null;
+    quote: QuoteResult | null;
+    quoting: boolean;
+    disabled: boolean;
+    onAmountChange: (raw: string) => void;
+    onFlip: () => void;
 }
 
 export function SwapAmountFields({
-  tokenIn,
-  outMeta,
-  amountText,
-  amountIn,
-  quote,
-  quoting,
-  disabled,
-  onAmountChange,
-  onFlip,
+    tokenIn,
+    outMeta,
+    amountText,
+    amountIn,
+    quote,
+    quoting,
+    disabled,
+    onAmountChange,
+    onFlip,
 }: SwapAmountFieldsProps) {
-  return (
-    <>
-      <div className="swap-card__leg">
-        <label className="swap-card__field">
-          <span>支付</span>
-          <input
-            type="text"
-            inputMode="decimal"
-            placeholder="0.0"
-            value={amountText}
-            onChange={(e) => onAmountChange(e.target.value)}
-            disabled={disabled}
-            aria-invalid={amountText !== "" && amountIn === null}
-          />
-        </label>
-        <select
-          className="swap-card__token"
-          value={tokenIn}
-          onChange={(e) => {
-            if (e.target.value !== tokenIn) onFlip();
-          }}
-          disabled={disabled}
-          aria-label="卖出代币"
-        >
-          {TOKEN_SYMBOLS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-      </div>
+    const tokenOptions: readonly SelectOption<TokenSymbol>[] = TOKEN_SYMBOLS.map((s) => ({
+        value: s,
+        label: s,
+        hint: s === "YD" ? "YiDeng Token" : "USD Coin",
+    }));
 
-      <button
-        type="button"
-        className="btn btn--ghost swap-card__flip"
-        onClick={onFlip}
-        disabled={disabled}
-        aria-label={`将方向翻转为 ${outMeta.symbol} → ${tokenIn}`}
-      >
-        ↓ 翻转
-      </button>
+    return (
+        <>
+            <div className="swap-card__leg">
+                <label className="swap-card__field">
+                    <span>支付</span>
+                    <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.0"
+                        value={amountText}
+                        onChange={(e) => onAmountChange(e.target.value)}
+                        disabled={disabled}
+                        aria-invalid={amountText !== "" && amountIn === null}
+                    />
+                </label>
+                <Select<TokenSymbol>
+                    value={tokenIn}
+                    onChange={(next) => {
+                        if (next !== tokenIn) onFlip();
+                    }}
+                    options={tokenOptions}
+                    disabled={disabled}
+                    ariaLabel="卖出代币"
+                />
+            </div>
 
-      <div className="swap-card__leg">
-        <label className="swap-card__field">
-          <span>预计收到</span>
-          <output className="swap-card__output">
-            {quoting ? "…" : quote ? formatTokenAmount(quote.amountOut, outMeta.decimals) : "—"}
-          </output>
-        </label>
-        <span className="swap-card__token swap-card__token--static">{outMeta.symbol}</span>
-      </div>
-    </>
-  );
+            <button
+                type="button"
+                className="btn btn--ghost swap-card__flip"
+                onClick={onFlip}
+                disabled={disabled}
+                aria-label={`将方向翻转为 ${outMeta.symbol} → ${tokenIn}`}
+            >
+                ↓ 翻转
+            </button>
+
+            <div className="swap-card__leg">
+                <label className="swap-card__field">
+                    <span>预计收到</span>
+                    <output className="swap-card__output">
+                        {quoting ? "…" : quote ? formatTokenAmount(quote.amountOut, outMeta.decimals) : "—"}
+                    </output>
+                </label>
+                <span className="swap-card__token swap-card__token--static">{outMeta.symbol}</span>
+            </div>
+        </>
+    );
 }

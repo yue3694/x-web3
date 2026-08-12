@@ -16,6 +16,7 @@ import {useCallback, useEffect, useState} from "react";
 import {useAccount} from "wagmi";
 
 import {ApiClientError} from "@/api/client";
+import {Select, type SelectOption} from "@/components/Select";
 import {TARGET_CHAIN_ID, TARGET_CHAIN_NAME} from "@/chains";
 import {adminApi} from "@/features/admin/adminApi";
 import type {ChainSyncStatus} from "@/features/admin/adminTypes";
@@ -29,6 +30,13 @@ const KNOWN_CHAINS: ReadonlyArray<{id: number; label: string}> = [
     {id: 137, label: "Polygon"},
     {id: 421614, label: "Arbitrum Sepolia"},
 ];
+
+// 主题化 Select 的选项：value 用 number，靠 hint 显示 chain id。
+const chainOptions: readonly SelectOption<number>[] = KNOWN_CHAINS.map((c) => ({
+    value: c.id,
+    label: c.label,
+    hint: String(c.id),
+}));
 
 type LagLevel = "ok" | "warn" | "danger";
 
@@ -66,10 +74,6 @@ const toolbarStyle = {
     alignItems: "center",
     gap: "0.6rem",
     margin: "0.6rem 0 1rem",
-} as const;
-const selectStyle = {
-    width: "auto",
-    minWidth: "12rem",
 } as const;
 const gridStyle = {
     display: "grid",
@@ -195,19 +199,15 @@ export function ChainStatusPanel() {
                     >
                         链
                     </label>
-                    <select
+                    <Select<number>
                         id="chain-select"
                         value={chainId}
-                        onChange={(e) => setChainId(Number(e.target.value))}
-                        style={selectStyle}
+                        onChange={setChainId}
+                        options={chainOptions}
                         disabled={loading}
-                    >
-                        {KNOWN_CHAINS.map((c) => (
-                            <option key={c.id} value={c.id}>
-                                {c.label}（{c.id}）
-                            </option>
-                        ))}
-                    </select>
+                        ariaLabel="选择要查询的网络"
+                        width="min"
+                    />
                     <button
                         type="button"
                         className="btn--ghost"

@@ -26,6 +26,7 @@ import {useCallback, useEffect, useMemo, useState, type FormEvent} from "react";
 
 import {ApiClientError} from "@/api/client";
 import {courseApi, type Course, type CourseChapter} from "@/api/types";
+import {Select, type SelectOption} from "@/components/Select";
 
 import {ChapterReorderList, type ChapterReorderItem} from "./ChapterReorderList";
 import {MediaUrlAttacher} from "./MediaUrlAttacher";
@@ -262,14 +263,27 @@ export function CourseEditor() {
 
             {mine.length ? (
                 <div className="card editor-actions">
-                    <label>
+                    <label className="editor-actions__select">
                         <span>我的课程</span>
-                        <select value={course?.id ?? ""} onChange={(event) => {
-                            const selected = mine.find((item) => item.course.id === event.target.value);
-                            if (selected) restore(selected);
-                        }}>
-                            {mine.map((item) => <option key={item.course.id} value={item.course.id}>{item.course.title} · {item.course.status.replace("_", " ")}</option>)}
-                        </select>
+                        {(() => {
+                            const opts: readonly SelectOption<string>[] = mine.map((item) => ({
+                                value: item.course.id,
+                                label: item.course.title,
+                                hint: item.course.status.replace("_", " "),
+                            }));
+                            return (
+                                <Select<string>
+                                    value={course?.id ?? ""}
+                                    onChange={(next) => {
+                                        const found = mine.find((item) => item.course.id === next);
+                                        if (found) restore(found);
+                                    }}
+                                    options={opts}
+                                    ariaLabel="选择要编辑的课程"
+                                    width="fit"
+                                />
+                            );
+                        })()}
                     </label>
                     <button className="btn--ghost" type="button" onClick={startNew}>新建草稿</button>
                 </div>

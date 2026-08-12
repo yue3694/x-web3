@@ -143,6 +143,12 @@ export interface Course {
     currentVersion: number;
     priceMinor: number;
     currency: string;
+    /** 当前版本的章节数；旧版后端可能不返回，消费方需容错。 */
+    chapterCount?: number;
+    /** 当前版本的课时数。 */
+    lessonCount?: number;
+    /** 当前版本所有课时时长之和（秒）。 */
+    durationSeconds?: number;
     publishedAt?: string;
     createdAt: string;
     updatedAt: string;

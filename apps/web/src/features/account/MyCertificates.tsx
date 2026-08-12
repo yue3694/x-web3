@@ -15,7 +15,7 @@
  * failed/dead 沉底。completedAt 倒序。
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ApiClientError } from "@/api/client";
@@ -58,79 +58,141 @@ interface CertDetailProps {
     onClose: () => void;
 }
 
+/**
+ * CertDetail — 证书详情弹框。
+ *
+ * 行为契约（按 ui-ux-pro-max §1/§7）：
+ *   · 居中浮层 + 暗化遮罩，避免点击触发按钮后内容跳到页面顶部
+ *   · Esc / 点击遮罩关闭；点面板内部不冒泡
+ *   · 打开时锁滚动 + 焦点移到关闭按钮；关闭时还焦点给触发按钮
+ *   · 尊重 prefers-reduced-motion：不放缩放淡入动画
+ */
 function CertDetail({ cert, onClose }: CertDetailProps) {
+    const closeRef = useRef<HTMLButtonElement>(null);
+    const dialogTitleId = "cert-modal-title";
+
+    // 进入时：记录触发元素，锁滚动，把焦点送到关闭按钮；
+    // 清理时反向还原，避免多个 modal 叠加时状态污染。
+    useEffect(() => {
+        const trigger =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        // 等一帧再聚焦，避免被外层动画抢焦点
+        const id = window.requestAnimationFrame(() => closeRef.current?.focus());
+        return () => {
+            window.cancelAnimationFrame(id);
+            document.body.style.overflow = prevOverflow;
+            trigger?.focus({ preventScroll: true });
+        };
+    }, []);
+
+    // Esc 关闭。监听挂在 window 上，capture=true 抢在外层 handler 之前
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                e.stopPropagation();
+                onClose();
+            }
+        };
+        window.addEventListener("keydown", onKey, true);
+        return () => window.removeEventListener("keydown", onKey, true);
+    }, [onClose]);
+
     return (
-        <aside className="my-certificates__detail" aria-live="polite">
-            <header className="my-certificates__detail-head">
-                <div className="my-certificates__detail-title">
-                    <CertStatusBadge status={cert.status} />
-                    <span className="my-certificates__detail-id">
-                        链上证书 ID <code>#{cert.onchainCertId}</code>
-                    </span>
-                </div>
-                <button
-                    type="button"
-                    className="btn--ghost btn--icon"
-                    onClick={onClose}
-                    aria-label="关闭证书详情"
-                >
-                    <svg
-                        aria-hidden="true"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                    >
-                        <path d="M18 6 6 18" />
-                        <path d="m6 6 12 12" />
-                    </svg>
-                </button>
-            </header>
-            <dl className="my-certificates__detail-meta">
-                <div>
-                    <dt>接收人</dt>
-                    <dd>
-                        <code title={cert.recipientWallet}>{truncateAddress(cert.recipientWallet)}</code>
-                    </dd>
-                </div>
-                <div>
-                    <dt>元数据</dt>
-                    <dd>
-                        <a
-                            href={cert.metadataUri}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="my-orders__link"
+        <div
+            className="my-certificates__modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={dialogTitleId}
+            onClick={onClose}
+        >
+            <div
+                className="my-certificates__detail"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <header className="my-certificates__detail-head">
+                    <div className="my-certificates__detail-title">
+                        <CertStatusBadge status={cert.status} />
+                        <span
+                            className="my-certificates__detail-id"
+                            id={dialogTitleId}
                         >
-                            IPFS
-                            <svg
-                                aria-hidden="true"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
+                            链上证书 ID <code>#{cert.onchainCertId}</code>
+                        </span>
+                    </div>
+                    <button
+                        ref={closeRef}
+                        type="button"
+                        className="btn--ghost btn--icon"
+                        onClick={onClose}
+                        aria-label="关闭证书详情"
+                    >
+                        <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        >
+                            <path d="M18 6 6 18" />
+                            <path d="m6 6 12 12" />
+                        </svg>
+                    </button>
+                </header>
+                <dl className="my-certificates__detail-meta">
+                    <div>
+                        <dt>接收人</dt>
+                        <dd>
+                            <code title={cert.recipientWallet}>
+                                {truncateAddress(cert.recipientWallet)}
+                            </code>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>元数据</dt>
+                        <dd>
+                            <a
+                                href={cert.metadataUri}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="my-orders__link"
                             >
-                                <path d="M15 3h6v6" />
-                                <path d="M10 14 21 3" />
-                                <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
-                            </svg>
-                        </a>
-                    </dd>
-                </div>
-                <div>
-                    <dt>完课时间</dt>
-                    <dd>{formatDate(cert.completedAt)}</dd>
-                </div>
-                <div>
-                    <dt>规则版本</dt>
-                    <dd>v{cert.ruleVersion}</dd>
-                </div>
-            </dl>
-        </aside>
+                                IPFS
+                                <svg
+                                    aria-hidden="true"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.8"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                >
+                                    <path d="M15 3h6v6" />
+                                    <path d="M10 14 21 3" />
+                                    <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+                                </svg>
+                            </a>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>完课时间</dt>
+                        <dd>{formatDate(cert.completedAt)}</dd>
+                    </div>
+                    <div>
+                        <dt>规则版本</dt>
+                        <dd>v{cert.ruleVersion}</dd>
+                    </div>
+                </dl>
+                <footer className="my-certificates__detail-foot">
+                    <button type="button" className="btn--ghost" onClick={onClose}>
+                        关闭
+                    </button>
+                </footer>
+            </div>
+        </div>
     );
 }
 
