@@ -26,6 +26,7 @@ import {TARGET_CHAIN_ID, TARGET_CHAIN_NAME} from "@/chains";
 import {erc20Abi} from "@/contracts/erc20.abi";
 import {marketAbi} from "@/contracts/market.abi";
 import {courseMarketDeployments} from "@/contracts/deployments";
+import {useNotify} from "@/components/NotifyProvider";
 
 import {uuidToBytes16} from "./derive";
 import {buttonLabel, isUserRejected, normalizeError} from "./checkoutUtils";
@@ -45,6 +46,7 @@ export function CheckoutButton({
     const {switchChain, isPending: isSwitching} = useSwitchChain();
     const {writeContractAsync} = useWriteContract();
     const publicClient = usePublicClient({chainId: TARGET_CHAIN_ID});
+    const {notify} = useNotify();
 
     const [state, setState] = useState<CheckoutState>("idle");
     const [error, setError] = useState<string | null>(null);
@@ -91,6 +93,10 @@ export function CheckoutButton({
             setError(receipt.error.message);
         }
     }, [state, receipt.error]);
+
+    useEffect(() => {
+        if (error) notify(error, "error");
+    }, [error, notify]);
 
     const onSwitch = () => {
         try {
@@ -158,9 +164,7 @@ export function CheckoutButton({
                 }),
             ]);
             if (balance < expectedAmount) {
-                throw new Error(TARGET_CHAIN_ID === 31337
-                    ? "YD 余额不足。本地 Anvil 请使用已注入资金的发币账户。"
-                    : "YD 余额不足以完成本次购买");
+                throw new Error("YD 余额不足以完成本次购买");
             }
             if (allowance < expectedAmount) {
                 setState("approving");
@@ -248,9 +252,6 @@ export function CheckoutButton({
                 {label}
             </button>
 
-            {error ? (
-                <p className="checkout-button__error" role="alert">{error}</p>
-            ) : null}
         </div>
     );
 }

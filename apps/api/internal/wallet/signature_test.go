@@ -35,6 +35,14 @@ func TestCanonicalMessage_StableAgainstReordering(t *testing.T) {
 	}
 }
 
+func TestCanonicalLoginMessage_Structure(t *testing.T) {
+	msg := CanonicalLoginMessage("nonce-login", 31337, "0xAbC...", "localhost:8080", "2030-01-01T00:00:00Z")
+	want := "x-web3 login\nnonce: nonce-login\nchainId: 31337\naddress: 0xabc...\ndomain: localhost:8080\nexpiry: 2030-01-01T00:00:00Z"
+	if msg != want {
+		t.Fatalf("unexpected login message:\n%s", msg)
+	}
+}
+
 // TestVerifyEIP191_RecoversAddress 用确定性签名验证 ecrecover。
 func TestVerifyEIP191_RecoversAddress(t *testing.T) {
 	priv, err := crypto.HexToECDSA("4af1bceebf7f3634ec3cff8a2c38e51178d5d4ce585c52d6043cfe7f3b25d4e1")

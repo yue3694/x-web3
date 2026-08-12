@@ -32,7 +32,7 @@ export const notepadDeployments = {
 /**
  * CourseMarket — 课程链上购买入口（F03）。
  * 先部署市场，再用 COURSES_CONFIG_PATH 执行配置模式写入课程和支付 Token。
- * 地址由 VITE_TARGET_CHAIN_ID 所选的 Anvil 或 Sepolia 环境回填。
+ * 当前仅回填 Sepolia 环境地址。
  */
 export const courseMarketDeployments = {
     target: {

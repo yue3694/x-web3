@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -206,6 +207,101 @@ func (h *MeHandler) GetMe(c *httpkit.Context) {
 	c.JSON(http.StatusOK, profile)
 }
 
+type updateProfileReq struct {
+	DisplayName string `json:"displayName" binding:"required"`
+}
+
+func (h *MeHandler) UpdateMe(c *httpkit.Context) {
+	uid, err := userIDFromCtx(c)
+	if err != nil {
+		httpkit.Error(c, http.StatusUnauthorized, errcode.SessionExpired, "no session", nil)
+		return
+	}
+	var req updateProfileReq
+	if !c.MustJSON(&req) {
+		return
+	}
+	name := strings.TrimSpace(req.DisplayName)
+	if len([]rune(name)) < 2 || len([]rune(name)) > 40 {
+		httpkit.Error(c, http.StatusBadRequest, errcode.BadRequest, "displayName must be 2-40 characters", nil)
+		return
+	}
+	if _, err := user.NewRepo(h.pool).UpdateDisplayName(c.Request.Context(), uid, name); err != nil {
+		httpkit.Internal(c, err)
+		return
+	}
+	profile := h.auth.profileOrInternal(c, uid)
+	if profile != nil {
+		c.JSON(http.StatusOK, profile)
+	}
+}
+
+type WalletAuthHandler struct {
+	cfg     *config.Config
+	wallet  *wallet.Service
+	session *auth.SessionStore
+	auth    *AuthHandler
+}
+
+func NewWalletAuthHandler(cfg *config.Config, walletSvc *wallet.Service, session *auth.SessionStore, authH *AuthHandler) *WalletAuthHandler {
+	return &WalletAuthHandler{cfg: cfg, wallet: walletSvc, session: session, auth: authH}
+}
+
+type walletAuthNonceReq struct {
+	ChainID int64  `json:"chainId" binding:"required"`
+	Address string `json:"address" binding:"required"`
+}
+
+func (h *WalletAuthHandler) IssueNonce(c *httpkit.Context) {
+	var req walletAuthNonceReq
+	if !c.MustJSON(&req) {
+		return
+	}
+	nonce, expiry, registered, displayName, err := h.wallet.IssueLoginNonce(c.Request.Context(), req.ChainID, req.Address)
+	if err != nil {
+		httpkit.Error(c, http.StatusBadRequest, errcode.BadRequest, err.Error(), nil)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"nonce": nonce, "domain": h.cfg.APIDomain, "expiresAt": expiry.UTC().Format(time.RFC3339), "registered": registered, "displayName": displayName})
+}
+
+type walletSessionReq struct {
+	ChainID     int64  `json:"chainId" binding:"required"`
+	Address     string `json:"address" binding:"required"`
+	Nonce       string `json:"nonce" binding:"required"`
+	Expiry      string `json:"expiry" binding:"required"`
+	Signature   string `json:"signature" binding:"required"`
+	Domain      string `json:"domain" binding:"required"`
+	DisplayName string `json:"displayName"`
+}
+
+func (h *WalletAuthHandler) CreateSession(c *httpkit.Context) {
+	var req walletSessionReq
+	if !c.MustJSON(&req) {
+		return
+	}
+	expiry, err := time.Parse(time.RFC3339, req.Expiry)
+	if err != nil {
+		httpkit.Error(c, http.StatusBadRequest, errcode.BadRequest, "expiry must be RFC3339", nil)
+		return
+	}
+	u, _, err := h.wallet.Login(c.Request.Context(), wallet.LoginRequest{ChainID: req.ChainID, Address: req.Address, Nonce: req.Nonce, Expiry: expiry, Signature: req.Signature, Domain: req.Domain, DisplayName: req.DisplayName})
+	if err != nil {
+		mapWalletErr(c, err)
+		return
+	}
+	sid, _, err := h.session.Issue(c.Request.Context(), u.PrivySubject, fpFromCtx(c))
+	if err != nil {
+		httpkit.Internal(c, err)
+		return
+	}
+	auth.SetSessionCookie(c, sid, int(h.cfg.SessionTTL.Seconds()), h.cfg.CookieSecure)
+	profile := h.auth.profileOrInternal(c, u.ID)
+	if profile != nil {
+		c.JSON(http.StatusOK, profile)
+	}
+}
+
 // WalletHandler 钱包绑定 / 解绑。
 type WalletHandler struct {
 	cfg       *config.Config
@@ -356,6 +452,8 @@ func mapWalletErr(c *httpkit.Context, err error) {
 		httpkit.Error(c, http.StatusUnprocessableEntity, errcode.WalletSignatureInvalid, msg, nil)
 	case contains(msg, "expired"):
 		httpkit.Error(c, http.StatusUnprocessableEntity, errcode.WalletSignatureInvalid, msg, nil)
+	case contains(msg, "display name") || contains(msg, "login identity"):
+		httpkit.Error(c, http.StatusBadRequest, errcode.BadRequest, msg, nil)
 	default:
 		httpkit.Internal(c, err)
 	}

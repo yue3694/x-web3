@@ -45,6 +45,11 @@ export interface WalletNonce {
 	expiresAt: string;
 }
 
+export interface WalletLoginChallenge extends WalletNonce {
+    registered: boolean;
+    displayName: string;
+}
+
 export const authApi = {
     async loginWithPrivy(privyAccessToken: string): Promise<Profile> {
         return apiClient.post<Profile>("/auth/privy/session", {
@@ -68,6 +73,15 @@ export const authApi = {
             }
             throw e;
         }
+    },
+    async issueWalletLoginNonce(chainId: number, address: string): Promise<WalletLoginChallenge> {
+        return apiClient.post<WalletLoginChallenge>("/auth/wallet/nonce", {chainId, address});
+    },
+    async loginWithWallet(req: WalletLinkRequest & {displayName?: string}): Promise<Profile> {
+        return apiClient.post<Profile>("/auth/wallet/session", req);
+    },
+    async updateProfile(displayName: string): Promise<Profile> {
+        return apiClient.patch<Profile>("/me", {displayName});
     },
 	async linkWallet(req: WalletLinkRequest): Promise<{wallets: Wallet[]}> {
         return apiClient.post<{wallets: Wallet[]}>("/me/wallets/link", req);

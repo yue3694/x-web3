@@ -41,7 +41,7 @@ User rejection resets to **idle** + friendly toast; we never auto-retry.
 
 ## Chain handling
 
-- Target chain comes from `VITE_TARGET_CHAIN_ID` (Anvil 31337 or Sepolia 11155111).
+- Target chain is Ethereum Sepolia (chain ID 11155111).
 - Wrong chain → button morphs into a target-chain switch action via `useSwitchChain`.
 - After switch, the buy button re-appears; user re-clicks to start intent.
 

@@ -9,6 +9,8 @@ import {App} from "./App";
 import {wagmiConfig} from "./wagmi";
 import {SessionProvider} from "./auth/SessionContext";
 import {PrivyRuntime} from "./auth/PrivyRuntime";
+import {WalletAutoSession} from "./auth/WalletAutoSession";
+import {NotifyProvider} from "./components/NotifyProvider";
 import "./styles.css";
 
 const queryClient = new QueryClient();
@@ -75,9 +77,12 @@ createRoot(rootElement).render(
                     }}
                 >
 						<SessionProvider>
-                            <BrowserRouter>
-							    <App />
-                            </BrowserRouter>
+							<NotifyProvider>
+                                <WalletAutoSession />
+                                <BrowserRouter>
+							        <App />
+                                </BrowserRouter>
+							</NotifyProvider>
 						</SessionProvider>
 					</ConnectKitProvider>
 				</QueryClientProvider>

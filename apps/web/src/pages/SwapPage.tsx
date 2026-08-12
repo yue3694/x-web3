@@ -1,5 +1,4 @@
-import {SwapCard} from "@/features/swap/SwapCard";
-import {TARGET_CHAIN_NAME} from "@/chains";
+import {SepoliaEthYDSwap} from "@/features/swap/SepoliaEthYDSwap";
 
 export default function SwapPage() {
     return (
@@ -9,17 +8,17 @@ export default function SwapPage() {
                     <span className="eyebrow">DeFi 兑换台</span>
                     <h1>为下一门课程准备 YD。</h1>
                     <p>
-                        在 {TARGET_CHAIN_NAME} 上兑换 YD 与 USDC，提供明确的报价、价格影响与滑点保护。
+                        连接 Ethereum Sepolia 钱包，使用 SepoliaETH 兑换课程支付所需的测试 YD。
                     </p>
                 </div>
                 <ul className="swap-workspace__bullets" aria-label="兑换要点">
                     <li>
                         <span aria-hidden="true">·</span>
-                        <span>Uniswap V3 · 0.3% 池路由</span>
+                        <span>唯一兑换方向 · SepoliaETH → YD</span>
                     </li>
                     <li>
                         <span aria-hidden="true">·</span>
-                        <span>价格影响阈值 10%，超过自动拦截</span>
+                        <span>仅供 Sepolia 测试，不代表市场价格</span>
                     </li>
                     <li>
                         <span aria-hidden="true">·</span>
@@ -28,7 +27,7 @@ export default function SwapPage() {
                 </ul>
             </header>
 
-            <SwapCard />
+            <SepoliaEthYDSwap />
         </div>
     );
 }

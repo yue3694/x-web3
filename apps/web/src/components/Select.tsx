@@ -125,9 +125,7 @@ export function Select<V extends SelectValue>(props: SelectProps<V>) {
         return () => {
             if (wasOpen) focusTrigger();
         };
-        // 仅监听 open 变化时执行。
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open]);
+    }, [focusTrigger, open]);
 
     const close = useCallback(() => setOpen(false), []);
 

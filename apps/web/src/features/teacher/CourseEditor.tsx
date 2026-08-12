@@ -349,7 +349,7 @@ export function CourseEditor() {
                                                 checked={lesson.required}
                                                 onChange={(event) => updateLesson(chapter.clientId, lesson.clientId, {required: event.target.checked})}
                                             />
-                                            <span>必修</span>
+                                            <span style={{textWrap: 'nowrap'}}>必修</span>
                                         </label>
                                         <label className="editor-lesson__duration">
                                             <span>秒</span>

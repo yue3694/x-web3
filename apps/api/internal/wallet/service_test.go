@@ -49,13 +49,10 @@ func freshPriv(t *testing.T) *ecdsa.PrivateKey {
 }
 
 // newSvc 构造真实 Service：miniredis + 真实 DB + audit nopSink。
-// 每次 TRUNCATE wallets，避免跨用例地址残留。
+// 每个用例使用随机用户与钱包地址，避免清空共享测试表影响外键数据。
 func newSvc(t *testing.T) (*Service, *miniredis.Miniredis) {
 	t.Helper()
 	pool := testPool(t)
-	if _, err := pool.Exec(context.Background(), `TRUNCATE wallets`); err != nil {
-		t.Fatalf("truncate wallets: %v", err)
-	}
 	mr, err := miniredis.Run()
 	if err != nil {
 		t.Fatalf("miniredis: %v", err)
@@ -121,6 +118,56 @@ func TestService_IssueNonce(t *testing.T) {
 	nonce, exp, err := svc.IssueNonce(ctx, uid)
 	if err != nil || nonce == "" || time.Until(exp) <= 0 {
 		t.Fatalf("IssueNonce: nonce=%q exp=%v err=%v", nonce, exp, err)
+	}
+}
+
+func signLoginRequest(t *testing.T, svc *Service, priv *ecdsa.PrivateKey, chainID int64, displayName string) LoginRequest {
+	t.Helper()
+	ctx := context.Background()
+	addr := crypto.PubkeyToAddress(priv.PublicKey).Hex()
+	nonce, exp, _, _, err := svc.IssueLoginNonce(ctx, chainID, addr)
+	if err != nil {
+		t.Fatalf("IssueLoginNonce: %v", err)
+	}
+	msg := CanonicalLoginMessage(nonce, chainID, addr, "localhost:8080", exp.UTC().Format(time.RFC3339))
+	raw, err := crypto.Sign(PrefixedHashForTest(msg), priv)
+	if err != nil {
+		t.Fatalf("sign login: %v", err)
+	}
+	raw[64] += 27
+	return LoginRequest{
+		ChainID: chainID, Address: addr, Nonce: nonce, Expiry: exp,
+		Signature: common.Bytes2Hex(raw), Domain: "localhost:8080", DisplayName: displayName,
+	}
+}
+
+func TestService_Login_RegistersThenLogsInExistingWallet(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	priv := freshPriv(t)
+
+	registered, created, err := svc.Login(ctx, signLoginRequest(t, svc, priv, 31337, "Wallet Student"))
+	if err != nil || !created {
+		t.Fatalf("register: user=%v created=%v err=%v", registered, created, err)
+	}
+	if registered.DisplayName != "Wallet Student" {
+		t.Fatalf("display name=%q", registered.DisplayName)
+	}
+
+	existing, created, err := svc.Login(ctx, signLoginRequest(t, svc, priv, 31337, "Ignored Name"))
+	if err != nil || created {
+		t.Fatalf("existing login: user=%v created=%v err=%v", existing, created, err)
+	}
+	if existing.ID != registered.ID || existing.DisplayName != "Wallet Student" {
+		t.Fatalf("existing wallet resolved to wrong user: %#v", existing)
+	}
+}
+
+func TestService_Login_RequiresNicknameForNewWallet(t *testing.T) {
+	svc, _ := newSvc(t)
+	_, _, err := svc.Login(context.Background(), signLoginRequest(t, svc, freshPriv(t), 31337, "x"))
+	if err == nil || !strings.Contains(err.Error(), "display name") {
+		t.Fatalf("expected display name validation, got %v", err)
 	}
 }
 

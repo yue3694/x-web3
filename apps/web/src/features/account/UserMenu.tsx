@@ -9,6 +9,8 @@ import {useEffect, useRef, useState} from "react";
 import {useDisconnect} from "wagmi";
 
 import {useSession} from "@/auth/SessionContext";
+import {authApi} from "@/api/types";
+import {useNotify} from "@/components/NotifyProvider";
 
 interface UserMenuProps {
     /** 触发按钮的 aria-label */
@@ -24,9 +26,13 @@ interface UserMenuProps {
 }
 
 export function UserMenu({label = "打开账户菜单", wallet}: UserMenuProps) {
-    const {profile, logout, hasRole} = useSession();
+    const {profile, logout, hasRole, setAuthenticatedProfile} = useSession();
     const {disconnect} = useDisconnect();
     const [open, setOpen] = useState(false);
+    const [editingName, setEditingName] = useState(false);
+    const [name, setName] = useState(profile?.displayName ?? "");
+    const [savingName, setSavingName] = useState(false);
+    const {notify} = useNotify();
     const rootRef = useRef<HTMLDivElement | null>(null);
 
     // 点击外部或 Esc 关闭。
@@ -63,6 +69,21 @@ export function UserMenu({label = "打开账户菜单", wallet}: UserMenuProps) 
         wallet.manage();
     };
 
+    const saveName = async () => {
+        const nextName = name.trim();
+        if (nextName.length < 2) return;
+        setSavingName(true);
+        try {
+            setAuthenticatedProfile(await authApi.updateProfile(nextName));
+            setEditingName(false);
+            notify("昵称修改成功。", "success");
+        } catch (cause) {
+            notify(cause instanceof Error ? cause.message : "昵称修改失败", "error");
+        } finally {
+            setSavingName(false);
+        }
+    };
+
     return (
         <div className="user-menu" ref={rootRef}>
             <button
@@ -95,6 +116,21 @@ export function UserMenu({label = "打开账户菜单", wallet}: UserMenuProps) 
                             <span className="badge">{profile.roles.join(" · ")}</span>
                         ) : null}
                     </header>
+
+                    <section className="user-menu__section">
+                        <h3>Profile</h3>
+                        {editingName ? (
+                            <div className="user-menu__name-editor">
+                                <input maxLength={40} value={name} onChange={(event) => setName(event.target.value)} aria-label="昵称" />
+                                <button className="btn--primary" type="button" disabled={savingName || name.trim().length < 2} onClick={() => void saveName()}>{savingName ? "保存中…" : "保存"}</button>
+                                <button className="btn--ghost" type="button" onClick={() => setEditingName(false)}>取消</button>
+                            </div>
+                        ) : (
+                            <button className="user-menu__profile-action" type="button" onClick={() => { setName(profile.displayName); setEditingName(true); }}>
+                                <span><strong>{profile.displayName}</strong><small>修改昵称</small></span><span aria-hidden="true">→</span>
+                            </button>
+                        )}
+                    </section>
 
                     <section className="user-menu__section">
                         <h3>钱包</h3>

@@ -22,8 +22,9 @@
     "deploy:certificate-nft:sepolia:no-verify": "dotenv -f ./.env run -- forge script script/DeployCertificateNFT.s.sol:DeployCertificateNFT --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv",
     "deploy:oracle:anvil": "dotenv -f ./.env run -- forge script script/DeployTestOracle.s.sol:DeployTestOracle --rpc-url $ANVIL_RPC_URL --broadcast -vvvv",
     "deploy:oracle:sepolia": "dotenv -f ./.env run -- forge script script/DeployPriceOracle.s.sol:DeployPriceOracle --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv",
+    "deploy:yd-sale:sepolia": "dotenv -e ./.env -- sh -c 'forge script script/DeploySepoliaYDSale.s.sol:DeploySepoliaYDSale --rpc-url \"$SEPOLIA_RPC_URL\" --broadcast -vvvv'",
     "verify:sepolia": "dotenv -f ./.env run -- forge verify-contract --chain sepolia --etherscan-api-key $ETHERSCAN_API_KEY --watch",
-    "export:abi": "node ./script/export-abi.mjs Counter Notepad CourseMarket YDToken CertificateNFT ChainlinkPriceOracle",
+    "export:abi": "node ./script/export-abi.mjs Counter Notepad CourseMarket YDToken CertificateNFT ChainlinkPriceOracle SepoliaYDSale",
     "clean": "forge clean"
   },
   "dependencies": {

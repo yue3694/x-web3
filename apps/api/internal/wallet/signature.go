@@ -71,3 +71,15 @@ func CanonicalMessage(nonce string, chainID int64, address, domain, expiry strin
 		"expiry: " + expiry,
 	}, "\n")
 }
+
+// CanonicalLoginMessage is the wallet-native login/registration challenge.
+func CanonicalLoginMessage(nonce string, chainID int64, address, domain, expiry string) string {
+	return strings.Join([]string{
+		"x-web3 login",
+		"nonce: " + nonce,
+		fmt.Sprintf("chainId: %d", chainID),
+		"address: " + strings.ToLower(address),
+		"domain: " + domain,
+		"expiry: " + expiry,
+	}, "\n")
+}

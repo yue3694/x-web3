@@ -2,6 +2,7 @@ package httpkit
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -44,17 +45,24 @@ func NewRouter(logger *zap.Logger, allowedOrigin string) *Router {
 
 // corsMiddleware 只允许配置的 Web origin 携带平台 session。
 // 没有 Origin 的同源服务调用和 CLI 请求继续放行。
-func corsMiddleware(allowedOrigin string) gin.HandlerFunc {
+func corsMiddleware(allowedOrigins string) gin.HandlerFunc {
+	allowed := make(map[string]struct{})
+	for _, candidate := range strings.Split(allowedOrigins, ",") {
+		if origin := strings.TrimSpace(candidate); origin != "" {
+			allowed[origin] = struct{}{}
+		}
+	}
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
-		if origin != "" && origin != allowedOrigin {
+		_, originAllowed := allowed[origin]
+		if origin != "" && !originAllowed {
 			c.AbortWithStatusJSON(http.StatusForbidden, envelope{Error: &errEnvelope{
 				Code: "FORBIDDEN", Message: "origin not allowed",
 				RequestID: c.GetString(string(RequestIDKey)),
 			}})
 			return
 		}
-		if origin == allowedOrigin {
+		if originAllowed {
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Access-Control-Allow-Credentials", "true")
 			c.Header("Access-Control-Allow-Headers", "Content-Type, X-Request-ID")

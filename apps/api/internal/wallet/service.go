@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/x-web3/api/internal/audit"
+	"github.com/x-web3/api/internal/user"
 )
 
 // BindRequest 包含绑定所需的全部字段。
@@ -27,6 +28,16 @@ type BindRequest struct {
 	Domain    string
 	IP        string
 	UA        string
+}
+
+type LoginRequest struct {
+	ChainID     int64
+	Address     string
+	Nonce       string
+	Expiry      time.Time
+	Signature   string
+	Domain      string
+	DisplayName string
 }
 
 // Service 是绑定业务入口。
@@ -43,6 +54,83 @@ func NewService(pool *pgxpool.Pool, nonces *NonceStore, domain string, auditor *
 
 func (s *Service) IssueNonce(ctx context.Context, userID uuid.UUID) (string, time.Time, error) {
 	return s.nonces.Issue(ctx, userID.String())
+}
+
+func loginNonceOwner(chainID int64, address string) string {
+	return fmt.Sprintf("login:%d:%s", chainID, strings.ToLower(common.HexToAddress(address).Hex()))
+}
+
+func (s *Service) IssueLoginNonce(ctx context.Context, chainID int64, address string) (string, time.Time, bool, string, error) {
+	if chainID <= 0 || !common.IsHexAddress(address) {
+		return "", time.Time{}, false, "", errors.New("wallet: bad login identity")
+	}
+	addr := strings.ToLower(common.HexToAddress(address).Hex())
+	var displayName string
+	err := s.pool.QueryRow(ctx, `SELECT u.display_name FROM wallets w JOIN users u ON u.id=w.user_id
+WHERE w.chain_id=$1 AND lower(w.address)=$2`, chainID, addr).Scan(&displayName)
+	registered := err == nil
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", time.Time{}, false, "", err
+	}
+	nonce, expiry, err := s.nonces.Issue(ctx, loginNonceOwner(chainID, addr))
+	return nonce, expiry, registered, displayName, err
+}
+
+func (s *Service) Login(ctx context.Context, req LoginRequest) (*user.User, bool, error) {
+	if err := VerifyDomain(req.Domain, s.domain); err != nil {
+		return nil, false, err
+	}
+	if req.Expiry.Before(time.Now().UTC()) || !common.IsHexAddress(req.Address) {
+		return nil, false, errors.New("wallet: login challenge expired or invalid")
+	}
+	addr := strings.ToLower(common.HexToAddress(req.Address).Hex())
+	msg := CanonicalLoginMessage(req.Nonce, req.ChainID, addr, req.Domain, req.Expiry.UTC().Format(time.RFC3339))
+	if err := VerifyEIP191(msg, req.Signature, addr); err != nil {
+		return nil, false, err
+	}
+	if err := s.nonces.Consume(ctx, req.Nonce, loginNonceOwner(req.ChainID, addr)); err != nil {
+		return nil, false, err
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	repo := user.NewRepo(s.pool)
+	var userID uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT user_id FROM wallets WHERE chain_id=$1 AND lower(address)=$2 FOR UPDATE`, req.ChainID, addr).Scan(&userID)
+	created := errors.Is(err, pgx.ErrNoRows)
+	if err != nil && !created {
+		return nil, false, err
+	}
+	var u *user.User
+	if created {
+		name := strings.TrimSpace(req.DisplayName)
+		if len([]rune(name)) < 2 || len([]rune(name)) > 40 {
+			return nil, false, errors.New("wallet: display name must be 2-40 characters")
+		}
+		subject := fmt.Sprintf("wallet:eip155:%d:%s", req.ChainID, addr)
+		u, err = repo.UpsertByPrivySubject(ctx, tx, subject, name)
+		if err != nil {
+			return nil, false, err
+		}
+		if err = repo.GrantDefaultRole(ctx, tx, u.ID); err != nil {
+			return nil, false, err
+		}
+		if err = repo.BindWallet(ctx, tx, &user.Wallet{UserID: u.ID, ChainID: req.ChainID, Address: addr, IsPrimary: true}); err != nil {
+			return nil, false, err
+		}
+	} else {
+		u, err = repo.GetByID(ctx, userID)
+		if err != nil || u == nil {
+			return nil, false, fmt.Errorf("wallet: user lookup: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, false, err
+	}
+	return u, created, nil
 }
 
 // Bind 完整流程：

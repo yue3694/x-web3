@@ -9,7 +9,7 @@
  */
 
 import {Link} from "react-router-dom";
-import {TARGET_CHAIN_ID, TARGET_CHAIN_NAME} from "@/chains";
+import {TARGET_CHAIN_NAME} from "@/chains";
 
 interface Stat {
     label: string;
@@ -19,7 +19,7 @@ interface Stat {
 
 const STATS: Stat[] = [
     {value: "12+", label: "已上线课程", hint: "覆盖 4 大方向"},
-    {value: TARGET_CHAIN_NAME, label: "测试链", hint: TARGET_CHAIN_ID === 31337 ? "本地 Anvil" : "Etherscan 已验证"},
+    {value: TARGET_CHAIN_NAME, label: "测试链", hint: "Ethereum Sepolia"},
     {value: "EAS", label: "凭据存证", hint: "链上工作证明"},
     {value: "Open", label: "开源", hint: "MIT 协议"},
 ];

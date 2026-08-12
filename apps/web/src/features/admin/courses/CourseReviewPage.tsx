@@ -4,6 +4,7 @@ import {useAccount, useChainId, usePublicClient, useSwitchChain, useWriteContrac
 
 import {ApiClientError} from "@/api/client";
 import {TARGET_CHAIN_ID, TARGET_CHAIN_NAME} from "@/chains";
+import {useNotify} from "@/components/NotifyProvider";
 import {courseMarketDeployments, ydTokenDeployments} from "@/contracts/deployments";
 import {marketAbi} from "@/contracts/market.abi";
 import {adminApi} from "@/features/admin/adminApi";
@@ -25,6 +26,10 @@ export function CourseReviewPage() {
     const {switchChainAsync} = useSwitchChain();
     const {writeContractAsync} = useWriteContract();
     const publicClient = usePublicClient({chainId: TARGET_CHAIN_ID});
+    const {notify} = useNotify();
+
+    useEffect(() => { if (error) notify(error, "error"); }, [error, notify]);
+    useEffect(() => { if (message) notify(message, "success"); }, [message, notify]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -103,13 +108,6 @@ export function CourseReviewPage() {
                     <p>发布流程会先在 {TARGET_CHAIN_NAME} 上配置付费课程，然后再上架到课程市场。</p>
                 </div>
             </header>
-            {error ? <div className="notice notice--error" role="alert">{error}</div> : null}
-            {message ? <div className="notice notice--ok" role="status">{message}</div> : null}
-            {TARGET_CHAIN_ID === 31337 && !isConnected ? (
-                <div className="notice notice--info" role="status">
-                    本地发布需要使用 Anvil 部署账户注入的浏览器钱包；WalletConnect / Reown 等移动端钱包无法访问本机 localhost RPC。
-                </div>
-            ) : null}
             {loading ? <p className="muted" role="status">正在加载审核队列…</p> : null}
             {!loading && items.length === 0 ? <div className="empty-state"><span>◇</span><h3>审核队列已清空</h3><p>新提交的课程会出现在这里。</p></div> : null}
             <div className="page-stack">

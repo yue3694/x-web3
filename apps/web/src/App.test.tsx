@@ -106,7 +106,7 @@ describe("App shell", () => {
         expect(screen.getAllByText(/WEB3 UNIVERSITY/i).length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText(/从发现到存证/i)).toBeTruthy();
         expect(screen.getByText(/探索课程/i)).toBeTruthy();
-        expect(screen.getByText(/chain_id: 31337/i)).toBeTruthy();
+        expect(screen.getAllByText(/Sepolia/i).length).toBeGreaterThanOrEqual(1);
     });
 
     it("TopNav exposes independent routed workspaces", () => {

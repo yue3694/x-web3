@@ -32,6 +32,7 @@ export interface SessionState {
     refresh: () => Promise<void>;
     /** 登录入口（参数来自 Privy；dev stub 模式可传任意字符串） */
     login: (privyAccessToken: string) => Promise<Profile>;
+    setAuthenticatedProfile: (profile: Profile) => void;
     logout: () => Promise<void>;
     /** 客户端权限检查：永远只是 UX 隐藏，权威在服务端 */
     hasPermission: (code: string) => boolean;
@@ -101,7 +102,7 @@ export function SessionProvider({
     }, [refresh]);
 
     const value = useMemo<SessionState>(
-        () => ({profile, loading, refresh, login, logout, hasPermission, hasRole}),
+        () => ({profile, loading, refresh, login, setAuthenticatedProfile: setProfile, logout, hasPermission, hasRole}),
         [profile, loading, refresh, login, logout, hasPermission, hasRole],
     );
 

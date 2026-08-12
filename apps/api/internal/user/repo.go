@@ -102,6 +102,17 @@ func (r *Repo) GetByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	return &u, nil
 }
 
+func (r *Repo) UpdateDisplayName(ctx context.Context, id uuid.UUID, displayName string) (*User, error) {
+	const q = `UPDATE users SET display_name=$1,updated_at=now() WHERE id=$2
+RETURNING id,privy_user_id,display_name,status,created_at,updated_at`
+	var u User
+	err := r.pool.QueryRow(ctx, q, displayName, id).Scan(&u.ID, &u.PrivySubject, &u.DisplayName, &u.Status, &u.CreatedAt, &u.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return &u, err
+}
+
 // ListWallets 返回用户全部钱包，按 is_primary desc, bound_at asc。
 func (r *Repo) ListWallets(ctx context.Context, userID uuid.UUID) ([]Wallet, error) {
 	const q = `

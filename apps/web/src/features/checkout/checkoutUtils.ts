@@ -9,6 +9,7 @@
 import {ApiClientError} from "@/api/client";
 
 import type {CheckoutError, CheckoutState} from "./checkoutTypes";
+import {formatUnits} from "viem";
 
 const USER_REJECTED_PATTERNS = [
     "user rejected",
@@ -50,7 +51,7 @@ export function buttonLabel(opts: {
     if (opts.onWrongChain) return opts.isSwitching ? "切换中…" : "切换网络";
     switch (opts.state) {
         case "idle":
-            return `用 ${opts.priceYD} YD 购买`;
+            return `用 ${formatUnits(BigInt(opts.priceYD), 18)} YD 购买`;
         case "preparing":
             return "正在准备支付意图…";
         case "checking":

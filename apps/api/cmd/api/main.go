@@ -158,6 +158,7 @@ func main() {
 	})
 
 	authH := handlers.NewAuthHandler(cfg, pool, verifier, sessionStore, auditWriter, logger)
+	walletAuthH := handlers.NewWalletAuthHandler(cfg, walletSvc, sessionStore, authH)
 	walletH := handlers.NewWalletHandler(cfg, pool, walletSvc, auditWriter, logger)
 	meH := handlers.NewMeHandler(pool, auditWriter, logger, authH)
 	courseH := handlers.NewCourseHandler(courseRepo, catalogSvc, auditWriter, &course.SettlementPrice{
@@ -172,6 +173,8 @@ func main() {
 	authGroup := v1.Group("/auth")
 	{
 		authGroup.POST("/privy/session", httpkit.RateLimit(rdb, "login", cfg.LoginRateLimit, httpkit.ClientIPKey), httpkit.Wrap(authH.PostPrivySession))
+		authGroup.POST("/wallet/nonce", httpkit.RateLimit(rdb, "wallet-login", cfg.LoginRateLimit, httpkit.ClientIPKey), httpkit.Wrap(walletAuthH.IssueNonce))
+		authGroup.POST("/wallet/session", httpkit.RateLimit(rdb, "wallet-login", cfg.LoginRateLimit, httpkit.ClientIPKey), httpkit.Wrap(walletAuthH.CreateSession))
 		authGroup.POST("/session/refresh", auth.Middleware(verifier, sessionStore, pool), httpkit.Wrap(authH.RefreshSession))
 		authGroup.DELETE("/session", httpkit.Wrap(authH.DeleteSession))
 	}
@@ -179,6 +182,7 @@ func main() {
 	meGroup.Use(auth.Middleware(verifier, sessionStore, pool))
 	{
 		meGroup.GET("", httpkit.Wrap(meH.GetMe))
+		meGroup.PATCH("", httpkit.Wrap(meH.UpdateMe))
 		walletLimit := httpkit.RateLimit(rdb, "wallet", cfg.WalletRateLimit, httpkit.UserIDKeyFunc)
 		meGroup.POST("/wallets/nonce", walletLimit, httpkit.Wrap(walletH.IssueNonce))
 		meGroup.POST("/wallets/link", walletLimit, httpkit.Wrap(walletH.Link))
